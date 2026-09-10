@@ -1,0 +1,59 @@
+version: '3.8'
+
+# 只编排本软件的 server + web + mysql。
+# Python Agent 是独立服务（在 ../Agent实习项目 下单独启动），本软件通过 HTTP 调用它。
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jobseeker-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: jobseeker
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 首次启动自动建表
+      - ./server/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    container_name: jobseeker-server
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/jobseeker?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-root}
+      # Agent 服务地址（宿主上运行的 Agent 用 host.docker.internal 访问）
+      AGENT_BASE_URL: ${AGENT_BASE_URL:-http://host.docker.internal:8000}
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
+      # AI 产物目录：只读挂载 Agent 的 Agent_output
+      AGENT_OUTPUT_DIR: /app/agent-output
+      STORAGE_BASE_DIR: /app/data
+    ports:
+      - '8080:8080'
+    volumes:
+      - server_data:/app/data
+      # 跨目录只读共享 Agent 的 AI 产物（简历导入用）
+      - ../Agent实习项目/Agent_output:/app/agent-output:ro
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    container_name: jobseeker-web
+    depends_on:
+      - server
+    ports:
+      - '80:80'
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  server_data:

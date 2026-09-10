@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <!--
+    本地 Maven 配置模板（机器相关，不进版本库）。
+    用法：复制为 local-settings.xml 后按本机修改：
+        copy .mvn/local-settings.xml.example .mvn/local-settings.xml
+    - localRepository：改到有权限的盘（如 C: 盘），避免仓库目录无写权限导致构建失败。
+    - mirror：配国内镜像加速依赖下载（可选，可删）。
+  -->
+  <localRepository>C:/Users/Administrator/.m2/repository</localRepository>
+
+  <mirrors>
+    <mirror>
+      <id>aliyun-public</id>
+      <name>Aliyun Maven Mirror</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>central,*</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>

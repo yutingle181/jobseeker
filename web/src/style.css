@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 97%;
+  --foreground: 222 47% 11%;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fa;
+  color: #1f2937;
+  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+/* 卡片统一观感：圆角 + 轻阴影 + 悬停微动效 */
+.card {
+  @apply rounded-2xl bg-white shadow-card transition-all duration-200;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 24px rgba(37, 99, 235, 0.14),
+    0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+button,
+a,
+[role='button'] {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* 流式光标 */
+.stream-cursor::after {
+  content: '▌';
+  margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+  color: #2563eb;
+}
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}

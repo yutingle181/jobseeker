@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 控制台输出（同步写出，但只被异步 appender 驱动） -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!--
+        异步包裹控制台：请求线程写日志只做 O(1) 入队即返回，不再被控制台写出阻塞。
+        neverBlock=true：队列满时丢弃日志而非回退为阻塞，杜绝日志拖垮业务接口。
+        （此前因 com.jobseeker=DEBUG 让 MyBatis 每条 SQL 打印日志，同步 ConsoleAppender
+         在控制台写出变慢时持有锁，导致 DB 请求线程长期等待、/api/job-sites 超时。）
+    -->
+    <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <neverBlock>true</neverBlock>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="CONSOLE" />
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC" />
+    </root>
+</configuration>

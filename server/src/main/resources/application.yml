@@ -1,0 +1,53 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: jobseeker-server
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/jobseeker?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    hikari:
+      pool-name: JobseekerHikariPool
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      max-lifetime: 1800000
+      idle-timeout: 600000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: assign_id
+
+# ---- Python Agent 对接 ----
+agent:
+  base-url: ${AGENT_BASE_URL:http://127.0.0.1:8000}
+  api-key: ${AGENT_API_KEY:}
+  connect-timeout-ms: 5000
+  read-timeout-ms: 120000
+  # AI 产物目录（Agent 的 Agent_output），只读
+  output-dir: ${AGENT_OUTPUT_DIR:../Agent实习项目/Agent_output}
+
+# ---- 本服务文件存储 ----
+storage:
+  base-dir: ${STORAGE_BASE_DIR:./data}
+
+# ---- 鉴权 ----
+jwt:
+  secret: ${JWT_SECRET:jobseeker-default-secret-please-change-in-production}
+  expire-minutes: 1440
+
+logging:
+  level:
+    root: INFO
+    com.jobseeker: INFO
