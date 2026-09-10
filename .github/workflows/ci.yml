@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# 说明：
+# - 后端：Maven 编译打包（JDK 17 / Spring Boot）。默认连 Maven Central；
+#   若 runner 在国内或内网，在「Maven 构建」前加一步写入 settings.xml（见下方注释）。
+# - 前端：npm ci 按锁定文件安装，再跑 vue-tsc 类型检查 + vite 构建。
+# - 两个 job 互相独立、并行执行。
+
+jobs:
+  backend:
+    name: Backend (Maven)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      # 可选：国内/内网 Maven 镜像。去掉注释即可启用（或把 settings.xml 存进仓库 secrets 再 cat 写入）。
+      # - name: Configure Maven mirror
+      #   run: |
+      #     mkdir -p ~/.m2
+      #     cat > ~/.m2/settings.xml <<'EOF'
+      #     <settings>
+      #       <mirrors>
+      #         <mirror>
+      #           <id>aliyun</id>
+      #           <mirrorOf>central</mirrorOf>
+      #           <name>aliyun maven</name>
+      #           <url>https://maven.aliyun.com/repository/public</url>
+      #         </mirror>
+      #       </mirrors>
+      #     </settings>
+      #     EOF
+
+      - name: Build with Maven
+        run: mvn -B -ntp package -DskipTests
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobseeker-server
+          path: server/target/*.jar
+          if-no-files-found: error
+
+  frontend:
+    name: Frontend (Vite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobseeker-web
+          path: web/dist
+          if-no-files-found: error
