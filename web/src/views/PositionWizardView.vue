@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { positionApi, resumeApi } from '@/api'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { positionApi, resumeApi, type EntityId } from '@/api'
 import { Check, ArrowLeft, ArrowRight } from 'lucide-vue-next'
 
+const route = useRoute()
 const router = useRouter()
 const step = ref(1)
 const saving = ref(false)
+const loading = ref(false)
 const errorMsg = ref('')
 
-const categories = ['后端工程师', '前端工程师', '测试工程师', '数据开发', '算法工程师', '新媒体运营', '会计', '产品经理']
+// 编辑模式：路由带 id 时为编辑，否则为新建
+const editId = ref<EntityId | null>(null)
+const rawId = route.params.id
+if (rawId) editId.value = Array.isArray(rawId) ? rawId[0] : rawId
+
+// 岗位分类改为「可输入 + 候选建议」：下拉只给常见示例，用户可直接输入任意分类
+const categorySuggestions = ['后端工程师', '前端工程师', '测试工程师', '数据开发', '算法工程师', '新媒体运营', '会计', '产品经理']
 
 const form = ref({
   category: '后端工程师',
@@ -22,7 +30,28 @@ const form = ref({
 
 const resumeText = ref('')
 const resumeTag = ref('应届生')
-const createdPositionId = ref<number | null>(null)
+const createdPositionId = ref<string | null>(null)
+
+// 编辑模式：进入时按 id 拉取已有数据回填，避免「编辑后信息丢失」
+onMounted(async () => {
+  if (!editId.value) return
+  loading.value = true
+  try {
+    const p = await positionApi.get(editId.value)
+    form.value = {
+      category: p.category || '后端工程师',
+      title: p.title || '',
+      description: p.description || '',
+      companyName: p.companyName || '',
+      companyIntro: p.companyIntro || '',
+      city: p.city || '',
+    }
+  } catch (e: any) {
+    errorMsg.value = e?.message || '加载岗位失败'
+  } finally {
+    loading.value = false
+  }
+})
 
 async function next() {
   errorMsg.value = ''
@@ -37,13 +66,17 @@ async function next() {
   if (step.value === 2) {
     saving.value = true
     try {
-      createdPositionId.value = await positionApi.create(form.value)
-      if (resumeText.value.trim()) {
-        await resumeApi.paste(resumeText.value, form.value.title + '-简历', resumeTag.value, createdPositionId.value)
+      if (editId.value) {
+        await positionApi.update(editId.value, form.value)
+      } else {
+        createdPositionId.value = await positionApi.create(form.value)
+        if (resumeText.value.trim()) {
+          await resumeApi.paste(resumeText.value, form.value.title + '-简历', resumeTag.value, createdPositionId.value)
+        }
       }
       step.value = 3
     } catch (e: any) {
-      errorMsg.value = e?.message || '保存失败'
+      errorMsg.value = e?.message || (editId.value ? '更新失败' : '保存失败')
     } finally {
       saving.value = false
     }
@@ -57,6 +90,7 @@ function back() {
 
 <template>
   <div class="mx-auto max-w-3xl px-6 py-8">
+    <h1 class="mb-6 text-xl font-semibold text-ink">{{ editId ? '编辑岗位' : '新建岗位' }}</h1>
     <!-- 步骤条 -->
     <div class="mb-8 flex items-center justify-center gap-3">
       <div v-for="(label, i) in ['填写岗位信息', '选择简历', '准备完成']" :key="label" class="flex items-center gap-2">
@@ -75,11 +109,18 @@ function back() {
     <div class="card p-6">
       <!-- 第一步：岗位信息 -->
       <div v-if="step === 1" class="space-y-4">
+        <p v-if="loading" class="text-sm text-muted">加载岗位信息中…</p>
         <div>
           <label class="mb-1 block text-sm text-muted">岗位分类</label>
-          <select v-model="form.category" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary">
-            <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
-          </select>
+          <input
+            v-model="form.category"
+            list="category-list"
+            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+            placeholder="可直接输入，如：运维工程师、UI 设计师、全栈工程师"
+          />
+          <datalist id="category-list">
+            <option v-for="c in categorySuggestions" :key="c" :value="c">{{ c }}</option>
+          </datalist>
         </div>
         <div>
           <label class="mb-1 block text-sm text-muted">岗位名称</label>
@@ -132,7 +173,7 @@ function back() {
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
           <Check class="h-6 w-6 text-success" />
         </div>
-        <p class="font-medium text-ink">岗位已创建完成</p>
+        <p class="font-medium text-ink">{{ editId ? '岗位信息已更新' : '岗位已创建完成' }}</p>
         <p class="mt-1 text-sm text-muted">接下来可以让 AI 助手基于这个岗位陪你模拟面试。</p>
         <div class="mt-6 flex justify-center gap-3">
           <button class="rounded-lg border border-primary/30 px-4 py-2 text-sm text-primary transition-colors hover:bg-primary/5" @click="router.push({ name: 'positions' })">

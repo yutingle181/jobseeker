@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { knowledgeApi } from '@/api'
 import { Upload, Trash2, Database } from 'lucide-vue-next'
 
-const docs = ref<{ id: number; agentKbName: string; fileName: string }[]>([])
+const docs = ref<{ id: string; agentKbName: string; fileName: string }[]>([])
 const kbName = ref('default')
 const errorMsg = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -30,7 +30,7 @@ async function onFile(e: Event) {
   }
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   try {
     await knowledgeApi.remove(id)
     await load()

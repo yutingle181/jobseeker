@@ -93,8 +93,10 @@ public class InterviewService {
         InterviewReview review = new InterviewReview();
         review.setSessionId(s.getId());
         review.setUserId(userId);
-        review.setSuggestions(extract(lastAssistant, "建议", "优势", "亮点"));
-        review.setWeaknesses(extract(lastAssistant, "弱点", "不足", "待改进"));
+        // 关键词与 Agent 侧渲染的复盘小标题对齐（interview_review 模式）：
+        // 老文案沿用，新文案补上「改进动作 / 薄弱点」，两边都不丢。
+        review.setSuggestions(extract(lastAssistant, "建议", "优势", "亮点", "改进动作", "改进建议"));
+        review.setWeaknesses(extract(lastAssistant, "弱点", "不足", "待改进", "薄弱点"));
         review.setDetail(lastAssistant);
         review.setCreatedAt(LocalDateTime.now());
         reviewMapper.insert(review);
@@ -130,24 +132,59 @@ public class InterviewService {
         return data;
     }
 
-    /** 从 Agent 的评价文本里粗略抽取"建议/弱点"段落，抽不到则留空由前端展示原文。 */
+    /**
+     * 从 Agent 的评价文本里抽取"建议 / 弱点"段落，抽不到则留空由前端展示原文。
+     *
+     * Agent 的 interview_review 模式产出的是带小标题的 Markdown（`### 薄弱点`、`### 改进动作`），
+     * 因此这里按「小标题分段」抽取：命中关键字的标题会把它下面的条目一并带出，遇到下一个标题即结束。
+     * 对没有小标题的纯文本（模拟面试的普通点评）自动退化为按行匹配，保持既有行为不变。
+     */
     private String extract(String text, String... keys) {
         if (text == null || text.isBlank()) {
             return "";
         }
         List<String> hit = new ArrayList<>();
+        boolean inSection = false;
         for (String line : text.split("\n")) {
             String t = line.trim();
             if (t.isEmpty()) {
                 continue;
             }
-            for (String k : keys) {
-                if (t.contains(k)) {
-                    hit.add(t.replaceFirst("^[-*#\\s]+", ""));
-                    break;
+            if (t.startsWith("#")) {
+                // 标题行：决定后续条目是否属于本次要抽取的段落
+                inSection = containsAny(t, keys);
+                if (inSection) {
+                    addIfPresent(hit, t);
                 }
+                continue;
+            }
+            if (inSection || containsAny(t, keys)) {
+                addIfPresent(hit, t);
             }
         }
         return String.join("\n", hit);
+    }
+
+    private boolean containsAny(String text, String... keys) {
+        for (String k : keys) {
+            if (text.contains(k)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addIfPresent(List<String> hit, String line) {
+        String item = stripMarkdown(line);
+        if (!item.isEmpty()) {
+            hit.add(item);
+        }
+    }
+
+    /** 去掉 Markdown 前缀：标题号、列表符号、任务清单勾选框。 */
+    private String stripMarkdown(String line) {
+        return line.replaceFirst("^[-*#\\s•]+", "")
+                .replaceFirst("^\\[[ xX]\\]\\s*", "")
+                .trim();
     }
 }

@@ -66,7 +66,7 @@ async function submitImport() {
   }
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   try {
     await resumeApi.remove(id)
     await load()

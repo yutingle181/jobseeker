@@ -29,7 +29,7 @@ const filtered = () => {
   )
 }
 
-async function remove(id: number) {
+async function remove(id: string) {
   try {
     await positionApi.remove(id)
     if (current.value?.id === id) current.value = null
@@ -81,7 +81,7 @@ async function remove(id: number) {
             </div>
             <div class="flex gap-2">
               <button class="rounded-lg p-2 text-muted transition-colors hover:bg-slate-100 hover:text-primary" title="编辑">
-                <Edit2 class="h-4 w-4" @click="router.push({ name: 'position-wizard' })" />
+                <Edit2 class="h-4 w-4" @click="router.push({ name: 'position-wizard', params: { id: current.id } })" />
               </button>
               <button class="rounded-lg p-2 text-muted transition-colors hover:bg-slate-100 hover:text-danger" title="删除" @click="remove(current.id)">
                 <Trash2 class="h-4 w-4" />

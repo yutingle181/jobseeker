@@ -1,12 +1,16 @@
 # AI 求职助手（jobseeker）
 
+> 当前版本 **v0.2.0**
+
+![GenAI 职业助手创意海报](docs/portfolio/assets/genai-career-assistant-poster.png)
+
 参照 OfferGoose 的求职辅助软件，**内嵌现有 Python Agent 作为独立的「AI 助手」**。
 
 核心分工：**Agent 负责"生成"，本软件负责"存、管、看"**。
 
 ## 设计原则
 
-- **Agent 的 7 个能力一律不重新实现**（教程 / 答疑 / 简历 / 面试真题 / 模拟面试 / 职位搜索 / 知识库问答），
+- **Agent 的 9 个能力一律不重新实现**（教程 / 答疑 / 简历 / 面试真题 / 模拟面试 / 职位搜索 / 知识库问答 / JD 匹配诊断 / 面试复盘），
   全部收归「AI 助手」页，Java 只做**薄网关透传**。
 - **薄网关的唯一加工点：装配用户画像**。调用 Agent 前，按登录用户把「所选岗位 + 关联简历」拼装为 `user_context` 注入 `/agent/chat` 与 `/agent/chat/stream`，让 Agent 直接"认识"用户岗位与简历。
 - **Agent 代码零改动**，只通过 HTTP / SSE 调用。
@@ -20,10 +24,13 @@
 | 账号 | 注册 / 登录 / JWT 鉴权 |
 | 岗位 JD 库 | 3 步向导新建、列表、详情、编辑、删除 |
 | 简历文件管理 | 上传 / 粘贴 / 版本 / 下载 / 删除 / 从 AI 产物导入 |
-| 面试归档与复盘 | 调 Agent `/sessions/{id}` 单向只读归档，时间轴复盘（建议 / 弱点） |
+| 面试归档与复盘 | 调 Agent `/sessions/{id}` 单向只读归档；**复盘升级为四段式结构化卡片**（表现评分环形指标 / 追问链步骤条 / 薄弱点 / 改进动作），解析失败自动回退旧版「建议 / 弱点」 |
+| **JD 匹配评分卡** | 关联岗位 + 简历后，把 Agent 的结构化产物渲染为 环形总分 + 分项进度条 + 命中/缺口双栏 + 面试准备重点 |
+| **工具调用时间线** | 把 SSE `tool_call` 事件渲染为可折叠时间线（工具名 / 耗时 / 入参摘要 / 返回摘要），过程可追溯 |
 | 职位搜索记录 | 保存检索与结果（`source=agent` 强制带免责说明） |
 | 知识库文档 | 上传文档归属与列表（建库问答在 Agent 侧） |
 | 招聘网站入口 | 站点配置 + 安全外链拼接 |
+| 网关可观测 | TTFT / P95 / 缓存命中率 + **工具调用次数与耗时分布**（`GET /agent/gateway-metrics`） |
 
 ## AI 助手上下文注入（user_context）
 
@@ -90,3 +97,11 @@ npm run dev
   界面强制展示"内容由 AI 生成，仅供参考"，请勿直接当作权威结论。
 - **`/agent/**` 需登录态**：AI 助手网关已纳入登录拦截（`AuthInterceptor` 覆盖 `/agent/**`），
   未登录会被拦截——这也是网关注入 `user_context` 的前提（需先拿到当前用户）。
+- **主键（雪花 ID）统一按字符串下发**：19 位 Long 超出 JS `Number` 安全整数范围，按数字下发会被
+  四舍五入（`...587778` → `...587800`），回传时 ID 已经错了、`user_context` 会**静默**注入失败。
+  已由 `config/JacksonConfig.java` 全局把 `Long` 序列化为字符串（`int` 不受影响，`Result.code` 仍是数字）；
+  前端所有 ID 一律当字符串透传，不做数值运算。
+- **SSE 事件类型**：`session` / `delta` / `tool_call`（工具调用过程）/ `done`（含 `tool_events` 与结构化产物 `structured`）；
+  长结构化调用期间每 15s 发一条 `: keep-alive` 注释，避免被网关 OkHttp 的 120s 读超时掐断。
+- **前端构建产物不入库**：`npm run build` 的 postbuild 会把 `web/dist` 复制到 `server/src/main/resources/static/`
+  （仅供 `:8080` 直接服务 UI），其中 `assets/` 与 `index.html` 已在 `.gitignore` 中忽略；`static/icons/` 是站点图标源码，需保留。

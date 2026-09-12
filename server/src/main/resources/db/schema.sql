@@ -133,8 +133,14 @@ CREATE TABLE IF NOT EXISTS job_site (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 INSERT INTO job_site (name, icon, url_template, sort, enabled) VALUES
-    ('BOSS 直聘',  'briefcase', 'https://www.zhipin.com/web/geek/job?query={keyword}&city={city}', 1, 1),
-    ('猎聘',       'briefcase', 'https://www.liepin.com/zhaopin/?key={keyword}',                   2, 1),
-    ('智联招聘',   'briefcase', 'https://sou.zhaopin.com/?kw={keyword}',                           3, 1),
-    ('前程无忧',   'briefcase', 'https://we.51job.com/pc/search?keyword={keyword}',                 4, 1)
-    ON DUPLICATE KEY UPDATE name = VALUES(name);
+    ('BOSS 直聘',  'boss.svg',    'https://www.zhipin.com/web/geek/job?query={keyword}&city={city}', 1, 1),
+    ('猎聘',       'liepin.svg',  'https://www.liepin.com/zhaopin/?key={keyword}',                   2, 1),
+    ('智联招聘',   'zhaopin.svg', 'https://sou.zhaopin.com/?kw={keyword}',                           3, 1),
+    ('前程无忧',   'job51.svg',   'https://we.51job.com/pc/search?keyword={keyword}',                 4, 1)
+    ON DUPLICATE KEY UPDATE name = VALUES(name), icon = VALUES(icon);
+
+-- 修正已存在数据（首次初始化后 icon 可能为占位值 briefcase）
+UPDATE job_site SET icon = 'boss.svg'    WHERE name = 'BOSS 直聘';
+UPDATE job_site SET icon = 'liepin.svg'  WHERE name = '猎聘';
+UPDATE job_site SET icon = 'zhaopin.svg' WHERE name = '智联招聘';
+UPDATE job_site SET icon = 'job51.svg'   WHERE name = '前程无忧';

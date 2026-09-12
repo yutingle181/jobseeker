@@ -1,7 +1,14 @@
 import http, { unwrap } from './http'
 
+/**
+ * 后端主键为雪花 ID（19 位），已统一按字符串下发：
+ * JS 的 Number 装不下 2^53 以上的整数，按数字接收会被四舍五入，回传即错。
+ * 因此这里所有 ID 类字段都是 string，只做透传与比较，不参与数值运算。
+ */
+export type EntityId = string
+
 export interface Position {
-  id: number
+  id: EntityId
   category: string
   title: string
   description: string
@@ -11,63 +18,64 @@ export interface Position {
 }
 
 export interface ResumeItem {
-  id: number
+  id: EntityId
   name: string
   sourceType: string
   tag: string
   status: string
-  positionId: number
+  positionId?: EntityId | null
   createdAt: string
 }
 
 export interface ReviewItem {
-  session: { id: number; mode: string; createdAt: string; positionId: number }
+  session: { id: EntityId; mode: string; createdAt: string; positionId?: EntityId | null }
   review: { suggestions: string; weaknesses: string; detail: string } | null
 }
 
 export const authApi = {
   login: (data: { username: string; password: string }) =>
-    unwrap<{ token: string; userId: number; nickname: string }>(http.post('/auth/login', data)),
+    unwrap<{ token: string; userId: EntityId; nickname: string }>(http.post('/auth/login', data)),
   register: (data: { username: string; password: string; nickname?: string }) =>
-    unwrap<{ token: string; userId: number; nickname: string }>(http.post('/auth/register', data)),
+    unwrap<{ token: string; userId: EntityId; nickname: string }>(http.post('/auth/register', data)),
 }
 
 export const positionApi = {
   list: () => unwrap<Position[]>(http.get('/positions')),
-  create: (data: Partial<Position>) => unwrap<number>(http.post('/positions', data)),
-  update: (id: number, data: Partial<Position>) => unwrap(http.put(`/positions/${id}`, data)),
-  remove: (id: number) => unwrap(http.delete(`/positions/${id}`)),
+  get: (id: EntityId) => unwrap<Position>(http.get(`/positions/${id}`)),
+  create: (data: Partial<Position>) => unwrap<EntityId>(http.post('/positions', data)),
+  update: (id: EntityId, data: Partial<Position>) => unwrap(http.put(`/positions/${id}`, data)),
+  remove: (id: EntityId) => unwrap(http.delete(`/positions/${id}`)),
 }
 
 export const resumeApi = {
   list: (status?: string) => unwrap<ResumeItem[]>(http.get('/resumes', { params: { status } })),
-  upload: (file: File, name: string, tag: string, positionId?: number) => {
+  upload: (file: File, name: string, tag: string, positionId?: EntityId) => {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('name', name)
     fd.append('tag', tag)
     if (positionId) fd.append('positionId', String(positionId))
-    return unwrap<number>(http.post('/resumes/upload', fd))
+    return unwrap<EntityId>(http.post('/resumes/upload', fd))
   },
-  paste: (content: string, name: string, tag: string, positionId?: number) =>
-    unwrap<number>(
+  paste: (content: string, name: string, tag: string, positionId?: EntityId) =>
+    unwrap<EntityId>(
       http.post('/resumes/paste', null, { params: { content, name, tag, positionId } }),
     ),
-  importAi: (fileName: string, tag: string, positionId?: number) =>
-    unwrap<number>(
+  importAi: (fileName: string, tag: string, positionId?: EntityId) =>
+    unwrap<EntityId>(
       http.post('/resumes/import-ai', null, { params: { fileName, tag, positionId } }),
     ),
-  remove: (id: number) => unwrap(http.delete(`/resumes/${id}`)),
-  downloadUrl: (id: number) => `/api/resumes/${id}/download`,
+  remove: (id: EntityId) => unwrap(http.delete(`/resumes/${id}`)),
+  downloadUrl: (id: EntityId) => `/api/resumes/${id}/download`,
 }
 
 export const interviewApi = {
-  archive: (agentSessionId: string, positionId?: number) =>
-    unwrap<number>(http.post('/interviews/archive', { agentSessionId, positionId })),
-  list: () => unwrap<{ id: number; mode: string; createdAt: string; positionId: number }[]>(
+  archive: (agentSessionId: string, positionId?: EntityId) =>
+    unwrap<EntityId>(http.post('/interviews/archive', { agentSessionId, positionId })),
+  list: () => unwrap<{ id: EntityId; mode: string; createdAt: string; positionId?: EntityId | null }[]>(
     http.get('/interviews'),
   ),
-  detail: (id: number) => unwrap<ReviewItem & { messages: { role: string; content: string }[] }>(
+  detail: (id: EntityId) => unwrap<ReviewItem & { messages: { role: string; content: string }[] }>(
     http.get(`/interviews/${id}`),
   ),
 }
@@ -75,23 +83,23 @@ export const interviewApi = {
 export const jobSiteApi = {
   // 显式 8s 超时（覆盖全局 30s），避免后端偶发卡死时前端干等整段超时
   list: (keyword?: string, city?: string) =>
-    unwrap<{ id: number; name: string; icon: string; url: string }[]>(
+    unwrap<{ id: EntityId; name: string; icon: string; url: string }[]>(
       http.get('/job-sites', { params: { keyword, city }, timeout: 8000 }),
     ),
 }
 
 export const jobSearchApi = {
   list: () =>
-    unwrap<{ id: number; keyword: string; result: string; source: string; disclaimer: string }[]>(
+    unwrap<{ id: EntityId; keyword: string; result: string; source: string; disclaimer: string }[]>(
       http.get('/job-searches'),
     ),
-  save: (data: { keyword: string; result: string; positionId?: number; source?: string }) =>
-    unwrap<number>(http.post('/job-searches', data)),
-  remove: (id: number) => unwrap(http.delete(`/job-searches/${id}`)),
+  save: (data: { keyword: string; result: string; positionId?: EntityId; source?: string }) =>
+    unwrap<EntityId>(http.post('/job-searches', data)),
+  remove: (id: EntityId) => unwrap(http.delete(`/job-searches/${id}`)),
 }
 
 export const knowledgeApi = {
-  list: () => unwrap<{ id: number; agentKbName: string; fileName: string }[]>(
+  list: () => unwrap<{ id: EntityId; agentKbName: string; fileName: string }[]>(
     http.get('/knowledge-docs'),
   ),
   record: (agentKbName: string, file: File) => {
@@ -100,13 +108,36 @@ export const knowledgeApi = {
     fd.append('file', file)
     return unwrap<number>(http.post('/knowledge-docs', fd))
   },
-  remove: (id: number) => unwrap(http.delete(`/knowledge-docs/${id}`)),
+  remove: (id: EntityId) => unwrap(http.delete(`/knowledge-docs/${id}`)),
+}
+
+/**
+ * 一次工具调用事件（Agent 侧 Function Calling 的可视化素材）。
+ *
+ * 只承载「工具名 / 耗时 / 参数与结果摘要」，不含工具返回全文——
+ * 与后端「事件不带原文」的约定一致，避免把检索原文灌进浏览器。
+ */
+export interface ToolCallEvent {
+  /** 工具名，如 web_search / knowledge_search */
+  name: string
+  /** 本次调用是否成功 */
+  ok?: boolean
+  /** 耗时（毫秒） */
+  elapsed_ms?: number
+  /** 入参摘要（已截断） */
+  args_summary?: string
+  /** 返回摘要（已截断） */
+  result_summary?: string
+  /** 事件序号，用于增量补全顺序 */
+  index?: number
 }
 
 export interface AgentStreamHandlers {
   onSession?: (info: { session_id: string; mode: string }) => void
   onDelta?: (text: string) => void
   onDone?: (payload: any) => void
+  /** 新增可选回调：老调用方不实现也不会报错 */
+  onToolCall?: (evt: ToolCallEvent) => void
 }
 
 /**
@@ -119,10 +150,10 @@ export interface AgentStreamBody {
   /** Agent 的英文 mode；不传则由 Agent 自动路由 */
   mode?: string
   kb_name?: string
-  /** 关联岗位 ID，由后端网关注入为 user_context */
-  position_id?: number
-  /** 关联简历 ID，由后端网关注入为 user_context */
-  resume_id?: number
+  /** 关联岗位 ID（雪花 ID 字符串），由后端网关注入为 user_context */
+  position_id?: EntityId
+  /** 关联简历 ID（雪花 ID 字符串），由后端网关注入为 user_context */
+  resume_id?: EntityId
 }
 
 export async function agentStream(
@@ -160,6 +191,7 @@ export async function agentStream(
         const evt = JSON.parse(raw)
         if (evt.type === 'session') handlers.onSession?.(evt)
         else if (evt.type === 'delta') handlers.onDelta?.(evt.text ?? '')
+        else if (evt.type === 'tool_call') handlers.onToolCall?.(evt as ToolCallEvent)
         else if (evt.type === 'done') handlers.onDone?.(evt)
       } catch {
         /* 忽略非 JSON 行 */
