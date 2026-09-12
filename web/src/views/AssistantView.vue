@@ -7,14 +7,21 @@ import {
   resumeApi,
   type Position,
   type ResumeItem,
+  type ToolCallEvent,
 } from '@/api'
 import { Archive, Link2, Send, Sparkles } from 'lucide-vue-next'
 import AiDisclaimer from '@/components/AiDisclaimer.vue'
+import JdScoreCard from '@/components/JdScoreCard.vue'
+import ToolTimeline from '@/components/ToolTimeline.vue'
 
 interface Msg {
   role: 'user' | 'assistant'
   content: string
   citations?: string[]
+  /** 本轮的工具调用过程（仅助手消息有） */
+  tools?: ToolCallEvent[]
+  /** 本轮的结构化产物，如 JD 匹配结果 */
+  structured?: Record<string, any> | null
 }
 
 /** 模式选项：value 为 Agent 的英文 mode，'' 代表自动路由（不下发 mode） */
@@ -22,6 +29,8 @@ const MODES = [
   { value: '', label: '自动路由' },
   { value: 'mock_interview', label: '模拟面试' },
   { value: 'interview_questions', label: '面试真题' },
+  { value: 'jd_match', label: 'JD 匹配诊断' },
+  { value: 'interview_review', label: '面试复盘' },
   { value: 'resume', label: '简历制作' },
   { value: 'knowledge', label: '知识库问答' },
   { value: 'job_search', label: '职位搜索' },
@@ -35,8 +44,8 @@ const streaming = ref(false)
 const sessionId = ref('')
 const mode = ref('') // 用户选择的模式，'' = 自动路由
 const resolvedMode = ref('') // 服务端回传的实际模式
-const positionId = ref<number | undefined>(undefined)
-const resumeId = ref<number | undefined>(undefined)
+const positionId = ref<string | undefined>(undefined)
+const resumeId = ref<string | undefined>(undefined)
 const positions = ref<Position[]>([])
 const resumes = ref<ResumeItem[]>([])
 const archived = ref(false)
@@ -119,8 +128,19 @@ async function send() {
           messages.value[idx].content += t
           scrollBottom()
         },
+        onToolCall: (evt) => {
+          const msg = messages.value[idx]
+          if (!msg.tools) msg.tools = []
+          msg.tools.push(evt)
+        },
         onDone: (payload) => {
-          messages.value[idx].citations = payload?.citations || []
+          const msg = messages.value[idx]
+          msg.citations = payload?.citations || []
+          msg.structured = payload?.structured ?? null
+          // done 里带完整过程列表：增量事件若被网络抖动吞掉，用它对账补齐
+          const events: ToolCallEvent[] = payload?.tool_events || []
+          if (events.length > (msg.tools?.length ?? 0)) msg.tools = events
+          scrollBottom()
         },
       },
     )
@@ -215,18 +235,38 @@ function resetAll() {
 
       <div v-for="(m, i) in messages" :key="i" class="flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
         <div
-          class="max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
-          :class="
-            m.role === 'user'
-              ? 'bg-primary text-white'
-              : 'bg-slate-100 text-ink' + (streaming && i === messages.length - 1 ? ' stream-cursor' : '')
-          "
+          class="flex flex-col"
+          :class="m.role === 'user' ? 'items-end' : 'items-start'"
         >
-          <div class="whitespace-pre-wrap">{{ m.content }}</div>
-          <div v-if="m.citations?.length" class="mt-2 border-t border-slate-200 pt-2 text-xs text-muted">
-            📎 引用来源
-            <div v-for="(c, ci) in m.citations" :key="ci">• {{ c }}</div>
+          <div
+            class="max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
+            :class="
+              m.role === 'user'
+                ? 'bg-primary text-white'
+                : 'bg-slate-100 text-ink' + (streaming && i === messages.length - 1 ? ' stream-cursor' : '')
+            "
+          >
+            <div class="whitespace-pre-wrap">{{ m.content }}</div>
+            <div v-if="m.citations?.length" class="mt-2 border-t border-slate-200 pt-2 text-xs text-muted">
+              📎 引用来源
+              <div v-for="(c, ci) in m.citations" :key="ci">• {{ c }}</div>
+            </div>
           </div>
+
+          <!-- 工具调用过程：过程可追溯，默认折叠 -->
+          <ToolTimeline
+            v-if="m.role === 'assistant' && m.tools"
+            :events="m.tools"
+            :running="streaming && i === messages.length - 1"
+            class="mt-2 w-full max-w-[560px]"
+          />
+
+          <!-- JD 匹配结论：结构化字段直出评分卡，与文字结论严格一致 -->
+          <JdScoreCard
+            v-if="m.role === 'assistant' && m.structured?.total_score != null"
+            :result="m.structured"
+            class="mt-2 w-full max-w-[640px]"
+          />
         </div>
       </div>
     </div>

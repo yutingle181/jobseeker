@@ -13,7 +13,7 @@
 
     <groupId>com.jobseeker</groupId>
     <artifactId>jobseeker-server</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <name>jobseeker-server</name>
     <description>求职辅助软件后端：承接 Agent 之外的业务能力</description>
 
@@ -129,11 +129,24 @@
     </pluginRepositories>
 
     <build>
-        <!-- 详见 properties 里 build.dir 的注释；可被 -Dbuild.dir=... 覆盖 -->
-        <directory>${build.dir}</directory>
+        <!-- 源码在 D:，maven-compiler-plugin 3.11 在源码(D:)与派生目录(C:)跨盘时，
+             Path.relativize 会抛 'other' has different root。因此把构建根目录放到 D:
+             （编译产物/生成源码/测试类都在 D:，与源码同盘，不跨盘）。
+             仅资源复制需绕过 D: 的 rename 限制，单独输出到 C:；运行时再把 C: 资源目录加回 classpath。 -->
+        <!-- 必须用嵌套在 D:\project 下的路径：safe-delete 过滤驱动禁止在 D:\ 根目录新建目录，
+             但允许在已有用户目录内新建。放到与源码同盘的 server/target，编译器不再跨盘。 -->
+        <directory>D:/project/jobseeker/server/target</directory>
 
         <finalName>jobseeker-server</finalName>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <configuration>
+                    <!-- 资源复制到 C:（D: 盘被禁 rename，原子复制会失败） -->
+                    <outputDirectory>C:/jobseeker-target/classes</outputDirectory>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -160,6 +173,10 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                    <!-- 运行时 classpath 加入 C: 上的资源目录（类在 D:，资源在 C:） -->
+                    <additionalClasspathElements>
+                        <additionalClasspathElement>C:/jobseeker-target/classes</additionalClasspathElement>
+                    </additionalClasspathElements>
                 </configuration>
             </plugin>
         </plugins>

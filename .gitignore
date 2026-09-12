@@ -16,6 +16,11 @@ dist/
 # Vite temp build cache
 *.timestamp-*.mjs
 
+# 前端构建产物：由 web 的 postbuild 复制到后端静态目录，仅供 :8080 直接服务 UI。
+# 源码在 web/，产物不入库（static/icons/ 是站点图标源码，保留）。
+server/src/main/resources/static/assets/
+server/src/main/resources/static/index.html
+
 # IDE
 .idea/
 *.iml

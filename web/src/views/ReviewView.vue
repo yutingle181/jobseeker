@@ -1,18 +1,26 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { interviewApi } from '@/api'
-import { MessageSquare, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import {
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
+  ListOrdered,
+  MessageSquare,
+  TrendingUp,
+} from 'lucide-vue-next'
 import AiDisclaimer from '@/components/AiDisclaimer.vue'
+import { hasParsedContent, parseReviewReport } from '@/utils/reviewParse'
 
 interface Session {
-  id: number
+  id: string
   mode: string
   createdAt: string
-  positionId: number
+  positionId?: string | null
 }
 
 const sessions = ref<Session[]>([])
-const expanded = ref<number | null>(null)
+const expanded = ref<string | null>(null)
 const detail = ref<any>(null)
 const errorMsg = ref('')
 
@@ -24,7 +32,7 @@ onMounted(async () => {
   }
 })
 
-async function toggle(id: number) {
+async function toggle(id: string) {
   if (expanded.value === id) {
     expanded.value = null
     detail.value = null
@@ -39,6 +47,16 @@ async function toggle(id: number) {
 }
 
 const splitLines = (s?: string) => (s ? s.split('\n').filter(Boolean) : [])
+
+/** 把 Agent 的复盘报告还原成四段式结构；解析不到内容时回退到后端抽取的文本 */
+const parsed = computed(() => parseReviewReport(detail.value?.review?.detail))
+const structured = computed(() => hasParsedContent(parsed.value))
+
+/** 环形指标：conic-gradient 按分数切弧 */
+function ringStyle(score: number) {
+  const v = Math.max(0, Math.min(100, Math.round(score || 0)))
+  return { background: `conic-gradient(#2563eb 0% ${v}%, #e2e8f0 ${v}% 100%)` }
+}
 </script>
 
 <template>
@@ -68,18 +86,102 @@ const splitLines = (s?: string) => (s ? s.split('\n').filter(Boolean) : [])
           </div>
 
           <div v-if="expanded === s.id && detail" class="mt-4 space-y-4 border-t border-slate-100 pt-4">
-            <div v-if="splitLines(detail.review?.suggestions).length" class="rounded-xl bg-success/5 p-4">
-              <p class="mb-2 text-xs font-medium text-success">建议</p>
-              <ul class="space-y-1 text-sm text-ink">
-                <li v-for="(l, i) in splitLines(detail.review.suggestions)" :key="i">• {{ l }}</li>
-              </ul>
-            </div>
-            <div v-if="splitLines(detail.review?.weaknesses).length" class="rounded-xl bg-danger/5 p-4">
-              <p class="mb-2 text-xs font-medium text-danger">弱点</p>
-              <ul class="space-y-1 text-sm text-ink">
-                <li v-for="(l, i) in splitLines(detail.review.weaknesses)" :key="i">• {{ l }}</li>
-              </ul>
-            </div>
+            <!-- 结构化复盘（Agent 的 interview_review 产出）：评分 / 追问链 / 薄弱点 / 改进动作 -->
+            <template v-if="structured">
+              <div class="animate-fade-in-up rounded-xl border border-slate-200 p-4">
+                <p class="mb-3 flex items-center gap-1.5 text-xs font-medium text-ink">
+                  <TrendingUp class="h-3.5 w-3.5 text-primary" />表现评分
+                </p>
+                <div class="flex flex-wrap items-center gap-5">
+                  <div
+                    v-if="parsed.overall !== null"
+                    class="flex h-20 w-20 items-center justify-center rounded-full"
+                    :style="ringStyle(parsed.overall)"
+                  >
+                    <div class="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full bg-white">
+                      <span class="text-lg font-semibold leading-none text-ink">{{ parsed.overall }}</span>
+                      <span class="mt-0.5 text-[10px] text-muted">总分</span>
+                    </div>
+                  </div>
+                  <div
+                    v-for="d in parsed.dimensions.slice(0, 3)"
+                    :key="d.label"
+                    class="flex flex-col items-center"
+                  >
+                    <div
+                      class="flex h-16 w-16 items-center justify-center rounded-full"
+                      :style="ringStyle(d.score)"
+                    >
+                      <div class="flex h-[50px] w-[50px] items-center justify-center rounded-full bg-white">
+                        <span class="text-sm font-semibold text-ink">{{ d.score }}</span>
+                      </div>
+                    </div>
+                    <span class="mt-1 max-w-[80px] truncate text-[11px] text-muted">{{ d.label }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="parsed.questionChain.length"
+                class="animate-fade-in-up rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+              >
+                <p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink">
+                  <ListOrdered class="h-3.5 w-3.5 text-primary" />追问链还原
+                </p>
+                <div class="ml-1 border-l-2 border-primary/40 pl-3">
+                  <div v-for="(q, qi) in parsed.questionChain" :key="qi" class="flex gap-2 py-1">
+                    <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary/70" />
+                    <p class="text-sm leading-relaxed text-slate-600">
+                      <span class="mr-1.5 text-xs text-muted">Q{{ qi + 1 }}</span>{{ q }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="parsed.weaknesses.length"
+                class="animate-fade-in-up rounded-xl border border-l-[3px] border-slate-200 border-l-red-500 bg-red-50/60 p-4"
+              >
+                <p class="mb-2 text-xs font-medium text-danger">薄弱点</p>
+                <p
+                  v-for="(l, i) in parsed.weaknesses"
+                  :key="i"
+                  class="text-sm leading-relaxed text-slate-600"
+                >
+                  • {{ l }}
+                </p>
+              </div>
+
+              <div
+                v-if="parsed.actions.length"
+                class="animate-fade-in-up rounded-xl border border-l-[3px] border-slate-200 border-l-emerald-500 bg-emerald-50/60 p-4"
+              >
+                <p class="mb-2 text-xs font-medium text-success">改进动作</p>
+                <p
+                  v-for="(l, i) in parsed.actions"
+                  :key="i"
+                  class="flex items-start gap-1.5 text-sm leading-relaxed text-slate-600"
+                >
+                  <CheckSquare class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />{{ l }}
+                </p>
+              </div>
+            </template>
+
+            <!-- 回退：老数据没有小标题，按后端抽取的「建议 / 弱点」文本展示 -->
+            <template v-else>
+              <div v-if="splitLines(detail.review?.suggestions).length" class="rounded-xl bg-success/5 p-4">
+                <p class="mb-2 text-xs font-medium text-success">建议</p>
+                <ul class="space-y-1 text-sm text-ink">
+                  <li v-for="(l, i) in splitLines(detail.review.suggestions)" :key="i">• {{ l }}</li>
+                </ul>
+              </div>
+              <div v-if="splitLines(detail.review?.weaknesses).length" class="rounded-xl bg-danger/5 p-4">
+                <p class="mb-2 text-xs font-medium text-danger">弱点</p>
+                <ul class="space-y-1 text-sm text-ink">
+                  <li v-for="(l, i) in splitLines(detail.review.weaknesses)" :key="i">• {{ l }}</li>
+                </ul>
+              </div>
+            </template>
 
             <div class="max-h-72 space-y-3 overflow-y-auto rounded-xl bg-bgSoft p-4">
               <div v-for="(m, i) in detail.messages || []" :key="i" class="text-sm">

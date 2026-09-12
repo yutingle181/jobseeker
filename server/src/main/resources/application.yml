@@ -37,6 +37,17 @@ agent:
   read-timeout-ms: 120000
   # AI 产物目录（Agent 的 Agent_output），只读
   output-dir: ${AGENT_OUTPUT_DIR:../Agent实习项目/Agent_output}
+  # ---- 网关层响应缓存（相同 query+user_context 命中即返回，省掉整轮 Agent 调用）----
+  chat-cache-enabled: ${AGENT_CHAT_CACHE_ENABLED:true}
+  chat-cache-max-size: ${AGENT_CHAT_CACHE_MAX_SIZE:1000}
+  chat-cache-ttl-seconds: ${AGENT_CHAT_CACHE_TTL:300}
+  # ---- user_context 按需裁剪（按 query 相关性动态压缩 JD/简历，降 token 与 prefill，9.2.C）----
+  context-compress-enabled: ${AGENT_CONTEXT_COMPRESS_ENABLED:true}
+  context-jd-limit: ${AGENT_CONTEXT_JD_LIMIT:1200}
+  context-resume-limit: ${AGENT_CONTEXT_RESUME_LIMIT:4000}
+  # ---- 端到端监控基线（首 token 延迟 / P95 + 缓存命中率，9.2.D）----
+  metrics-enabled: ${AGENT_METRICS_ENABLED:true}
+  metrics-max-samples: ${AGENT_METRICS_MAX_SAMPLES:2000}
 
 # ---- 本服务文件存储 ----
 storage:

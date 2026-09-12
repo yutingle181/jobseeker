@@ -2,6 +2,7 @@ package com.jobseeker.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jobseeker.common.UserContext;
+import com.jobseeker.compress.ContextCompressor;
 import com.jobseeker.entity.JobPosition;
 import com.jobseeker.entity.Resume;
 import com.jobseeker.mapper.JobPositionMapper;
@@ -24,22 +25,19 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AgentContextService {
 
-    /** JD 截断长度（字符），避免撑爆 prompt */
-    private static final int JD_LIMIT = 1200;
-    /** 简历正文截断长度（字符） */
-    private static final int RESUME_LIMIT = 4000;
-
     private final JobPositionMapper positionMapper;
     private final ResumeMapper resumeMapper;
+    private final ContextCompressor compressor;
 
     /**
      * 拼装用户档案文本。
      *
      * @param positionId 关联岗位 ID，可空
      * @param resumeId   关联简历 ID，可空
+     * @param query      用户问题（用于 user_context 按需裁剪，可空）
      * @return 用户档案文本；无任何可用关联信息时返回 null（调用方跳过注入）
      */
-    public String build(Long positionId, Long resumeId) {
+    public String build(Long positionId, Long resumeId, String query) {
         Long userId = UserContext.require();
         if (positionId == null && resumeId == null) {
             return null;
@@ -58,7 +56,7 @@ public class AgentContextService {
             appendItem(sb, "岗位分类", position.getCategory());
             appendItem(sb, "公司", position.getCompanyName());
             appendItem(sb, "城市", position.getCity());
-            appendItem(sb, "岗位描述(JD)", truncate(position.getDescription(), JD_LIMIT));
+            appendItem(sb, "岗位描述(JD)", compressor.compressJd(position.getDescription(), query));
             any = true;
         }
 
@@ -67,7 +65,7 @@ public class AgentContextService {
             sb.append("\n## 我的简历\n");
             appendItem(sb, "简历名称", resume.getName());
             appendItem(sb, "经验标签", resume.getTag());
-            appendItem(sb, "简历正文", truncate(resume.getContent(), RESUME_LIMIT));
+            appendItem(sb, "简历正文", compressor.compressResume(resume.getContent(), query));
             any = true;
         }
 
@@ -112,17 +110,5 @@ public class AgentContextService {
             return;
         }
         sb.append("- ").append(label).append("：").append(value.trim()).append('\n');
-    }
-
-    /** 超长文本截断，控制 token 成本。 */
-    private static String truncate(String text, int limit) {
-        if (text == null) {
-            return null;
-        }
-        String t = text.trim();
-        if (t.length() <= limit) {
-            return t;
-        }
-        return t.substring(0, limit) + "…（已截断）";
     }
 }

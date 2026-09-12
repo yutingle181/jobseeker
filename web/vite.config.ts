@@ -8,6 +8,12 @@ export default defineConfig({
   // deps_temp_* -> deps 重命名失败、持续 504。将缓存目录重定向到 C: 以绕过该封锁。
   cacheDir: 'C:/vite-cache/jobseeker-web',
   plugins: [vue()],
+  build: {
+    // D: 盘禁止删除/重命名，Vite 默认的 emptyOutDir 会在重建前删除旧 dist，
+    // 被 safe-delete 拦截导致 build 失败。关闭后旧文件由新哈希文件覆盖即可，
+    // 构建后由 postbuild 脚本把 dist 同步到后端 static。
+    emptyOutDir: false,
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

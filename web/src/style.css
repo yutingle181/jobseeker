@@ -52,3 +52,18 @@ button:disabled {
     visibility: hidden;
   }
 }
+
+/* 新增模块入场：轻微上浮 + 淡入（时长与既有 200ms 悬停位移保持一致，不引入新节奏） */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 200ms ease-out both;
+}

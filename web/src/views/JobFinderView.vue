@@ -2,14 +2,14 @@
 import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { jobSiteApi, jobSearchApi, positionApi, type Position } from '@/api'
-import { ExternalLink, AlertTriangle, Sparkles, Trash2 } from 'lucide-vue-next'
+import { ExternalLink, AlertTriangle, Sparkles, Trash2, Briefcase } from 'lucide-vue-next'
 
 const router = useRouter()
-const sites = ref<{ id: number; name: string; icon: string; url: string }[]>([])
+const sites = ref<{ id: string; name: string; icon: string; url: string }[]>([])
 const positions = ref<Position[]>([])
 const keyword = ref('')
 const city = ref('')
-const records = ref<{ id: number; keyword: string; result: string; source: string; disclaimer: string }[]>([])
+const records = ref<{ id: string; keyword: string; result: string; source: string; disclaimer: string }[]>([])
 const errorMsg = ref('')
 const loading = ref(false)
 const loadError = ref(false)
@@ -46,7 +46,7 @@ async function loadRecords() {
 
 onMounted(loadRecords)
 
-async function removeRecord(id: number) {
+async function removeRecord(id: string) {
   try {
     await jobSearchApi.remove(id)
     await loadRecords()
@@ -57,6 +57,10 @@ async function removeRecord(id: number) {
 
 function openSite(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+function isSvgIcon(icon?: string) {
+  return !!icon && icon.toLowerCase().endsWith('.svg')
 }
 
 const currentPositionTitle = computed(() => keyword.value || '未选择岗位')
@@ -90,6 +94,8 @@ const currentPositionTitle = computed(() => keyword.value || '未选择岗位')
           class="card card-hover flex flex-col items-center gap-2 p-5"
           @click="openSite(s.url)"
         >
+          <img v-if="isSvgIcon(s.icon)" :src="`/icons/${s.icon}`" :alt="s.name" class="h-9 w-9" />
+          <Briefcase v-else class="h-9 w-9 text-primary" />
           <span class="text-sm font-medium text-ink">{{ s.name }}</span>
           <span class="flex items-center gap-1 text-xs text-primary">
             前往搜索<ExternalLink class="h-3 w-3" />
