@@ -73,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jobseeker-server
-          path: server/target/*.jar
+          path: ${{ github.workspace }}/server/target/*.jar
           if-no-files-found: error
 
   frontend:
