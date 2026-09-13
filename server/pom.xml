@@ -27,11 +27,14 @@
         <okhttp.version>4.12.0</okhttp.version>
         <lombok.version>1.18.32</lombok.version>
         <!--
-            本机 D: 盘被 safe-delete 过滤驱动全局禁止 rename/delete，maven-resources-plugin
-            的「临时文件+rename」原子复制会触发 AccessDeniedException（Vite 也撞过同样的坑）。
-            因此默认把构建输出写到 C: 绕过；其它机器可用 -Dbuild.dir=target 覆盖回 D: 默认位置。
+            默认构建输出目录。
+            - CI / Linux / macOS：保持在项目内 target，便于 upload-artifact。
+            - 本机 Windows（D: 盘受 safe-delete 过滤驱动影响，maven-resources-plugin
+              的「临时文件+rename」原子复制会触发 AccessDeniedException）：
+              由 windows  profile 把资源输出临时改到 C:，编译产物仍留在项目同盘 target。
         -->
-        <build.dir>C:/jobseeker-target</build.dir>
+        <build.dir>${project.basedir}/target</build.dir>
+        <resources.dir>${build.dir}/classes</resources.dir>
     </properties>
 
     <dependencies>
@@ -129,13 +132,10 @@
     </pluginRepositories>
 
     <build>
-        <!-- 源码在 D:，maven-compiler-plugin 3.11 在源码(D:)与派生目录(C:)跨盘时，
-             Path.relativize 会抛 'other' has different root。因此把构建根目录放到 D:
-             （编译产物/生成源码/测试类都在 D:，与源码同盘，不跨盘）。
-             仅资源复制需绕过 D: 的 rename 限制，单独输出到 C:；运行时再把 C: 资源目录加回 classpath。 -->
-        <!-- 必须用嵌套在 D:\project 下的路径：safe-delete 过滤驱动禁止在 D:\ 根目录新建目录，
-             但允许在已有用户目录内新建。放到与源码同盘的 server/target，编译器不再跨盘。 -->
-        <directory>D:/project/jobseeker/server/target</directory>
+        <!-- build.dir 默认指向项目内 target（CI / Linux / macOS 通用）。
+             Windows 本地若受 safe-delete 过滤驱动影响，由 windows profile 把资源输出改到 C:，
+             编译产物仍留在与源码同盘的 target，避免 maven-compiler-plugin 跨盘 relativize 报错。 -->
+        <directory>${build.dir}</directory>
 
         <finalName>jobseeker-server</finalName>
         <plugins>
@@ -162,8 +162,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <configuration>
-                    <!-- 资源复制到 C:（D: 盘被禁 rename，原子复制会失败） -->
-                    <outputDirectory>C:/jobseeker-target/classes</outputDirectory>
+                    <outputDirectory>${resources.dir}</outputDirectory>
                 </configuration>
             </plugin>
             <plugin>
@@ -193,12 +192,28 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
-                    <!-- 运行时 classpath 加入 C: 上的资源目录（类在 D:，资源在 C:） -->
                     <additionalClasspathElements>
-                        <additionalClasspathElement>C:/jobseeker-target/classes</additionalClasspathElement>
+                        <additionalClasspathElement>${resources.dir}</additionalClasspathElement>
                     </additionalClasspathElements>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>windows-safe-delete</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <properties>
+                <!-- Windows 本地：maven-resources-plugin 的临时文件+rename 原子复制
+                     在 D: 盘会被 safe-delete 过滤驱动拦截，改为输出到 C:。
+                     编译产物仍在项目同盘 target，避免 compiler Path.relativize 跨盘问题。 -->
+                <resources.dir>C:/jobseeker-target/classes</resources.dir>
+            </properties>
+        </profile>
+    </profiles>
 </project>
