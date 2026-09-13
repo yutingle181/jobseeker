@@ -111,7 +111,7 @@
         </dependency>
     </dependencies>
 
-    <!-- 使用阿里云镜像加速依赖下载 -->
+    <!-- 使用阿里云镜像加速依赖下载。 -->
     <repositories>
         <repository>
             <id>aliyun-central</id>
