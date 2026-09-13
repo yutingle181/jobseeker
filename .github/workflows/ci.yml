@@ -31,6 +31,24 @@ jobs:
           distribution: "temurin"
           cache: maven
 
+      - name: Configure Maven toolchains
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains>
+            <toolchain>
+              <type>jdk</type>
+              <provides>
+                <version>17</version>
+              </provides>
+              <configuration>
+                <jdkHome>${JAVA_HOME}</jdkHome>
+              </configuration>
+            </toolchain>
+          </toolchains>
+          EOF
+
       # 可选：国内/内网 Maven 镜像。去掉注释即可启用（或把 settings.xml 存进仓库 secrets 再 cat 写入）。
       # - name: Configure Maven mirror
       #   run: |
