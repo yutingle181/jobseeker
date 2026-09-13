@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "postbuild": "call copy-dist.bat",
+    "postbuild": "node copy-dist.js",
     "preview": "vite preview"
   },
   "dependencies": {
