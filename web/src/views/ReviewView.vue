@@ -19,6 +19,24 @@ interface Session {
   positionId?: string | null
 }
 
+/** Agent 侧的模式英文名 → 中文展示名（与助手页的模式选项保持一致） */
+const MODE_LABELS: Record<string, string> = {
+  mock_interview: '模拟面试',
+  interview_questions: '面试真题',
+  jd_match: 'JD 匹配诊断',
+  interview_review: '面试复盘',
+  resume: '简历制作',
+  knowledge: '知识库问答',
+  job_search: '职位搜索',
+  qa: '答疑问答',
+  tutorial: '教程生成',
+}
+
+function modeLabel(mode?: string | null): string {
+  if (!mode) return '面试'
+  return MODE_LABELS[mode] || mode
+}
+
 const sessions = ref<Session[]>([])
 const expanded = ref<string | null>(null)
 const detail = ref<any>(null)
@@ -75,7 +93,7 @@ function ringStyle(score: number) {
         <div class="card card-hover p-5">
           <div class="flex items-start justify-between">
             <div>
-              <p class="font-medium text-ink">{{ s.mode || '面试' }}</p>
+              <p class="font-medium text-ink">{{ modeLabel(s.mode) }}</p>
               <p class="mt-1 text-xs text-muted">{{ s.createdAt }}</p>
             </div>
             <button class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-primary transition-colors hover:bg-primary/5" @click="toggle(s.id)">
