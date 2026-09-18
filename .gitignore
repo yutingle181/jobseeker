@@ -38,4 +38,6 @@ Thumbs.db
 # 本地产物 / 备份（不入库）
 server/data/
 .codebuddy/
-docs/portfolio/**/*.old.*
+
+# 与项目无关的本地文档（仅本地保存，不进仓库）
+docs/portfolio/

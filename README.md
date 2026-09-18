@@ -1,9 +1,5 @@
 # AI 求职助手（jobseeker）
 
-![AI 求职助手 Banner](docs/portfolio/assets/banner.png)
-
-![GenAI 职业助手 · 海报](docs/portfolio/assets/poster.png)
-
 > 当前版本 **v0.3.0**
 
 参照 OfferGoose 的求职辅助软件，**内嵌现有 Python Agent 作为独立的「AI 助手」**。
