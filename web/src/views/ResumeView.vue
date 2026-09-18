@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { resumeApi, type ResumeItem } from '@/api'
-import { Upload, Download, Trash2, FileText } from 'lucide-vue-next'
+import { resumeApi, positionApi, agentStream, type ResumeItem, type Position, type EntityId } from '@/api'
+import { Upload, Download, Trash2, FileText, Wand2 } from 'lucide-vue-next'
 import AiDisclaimer from '@/components/AiDisclaimer.vue'
 
 const list = ref<ResumeItem[]>([])
@@ -73,6 +73,83 @@ async function remove(id: string) {
   } catch (e: any) {
     errorMsg.value = e?.message || '删除失败'
   }
+}
+
+// ===== 去优化：基于已有简历 + 目标岗位，调 Agent 流式生成优化版简历 =====
+const positions = ref<Position[]>([])
+const showOptimize = ref(false)
+const optimizeTarget = ref<ResumeItem | null>(null)
+const optimizePositionId = ref<EntityId | undefined>(undefined)
+const optimizeStreaming = ref(false)
+const optimizePreview = ref('')
+const optimizeAbort = ref<AbortController | null>(null)
+
+async function openOptimize(r: ResumeItem) {
+  optimizeTarget.value = r
+  optimizePreview.value = ''
+  optimizePositionId.value = r.positionId ?? undefined
+  errorMsg.value = ''
+  if (!positions.value.length) {
+    try {
+      positions.value = await positionApi.list()
+    } catch (e: any) {
+      errorMsg.value = e?.message || '加载岗位失败'
+    }
+  }
+  showOptimize.value = true
+}
+
+async function startOptimize() {
+  if (!optimizeTarget.value || optimizeStreaming.value) return
+  optimizeStreaming.value = true
+  optimizePreview.value = ''
+  errorMsg.value = ''
+  const ctrl = new AbortController()
+  optimizeAbort.value = ctrl
+  try {
+    await agentStream(
+      {
+        query:
+          '请基于我关联的目标岗位，优化我的简历：突出与岗位要求匹配的技能、项目经历与成果，保持真实、不虚构，输出可直接使用的优化版简历全文。',
+        mode: 'resume',
+        position_id: optimizePositionId.value,
+        resume_id: optimizeTarget.value.id,
+      },
+      { onDelta: (t: string) => { optimizePreview.value += t } },
+      ctrl.signal,
+    )
+    await saveOptimized()
+  } catch (e: any) {
+    errorMsg.value = e?.message || '生成失败'
+  } finally {
+    optimizeStreaming.value = false
+    optimizeAbort.value = null
+  }
+}
+
+async function saveOptimized() {
+  if (!optimizeTarget.value) return
+  if (!optimizePreview.value.trim()) {
+    errorMsg.value = '未生成优化内容，无法保存'
+    return
+  }
+  try {
+    await resumeApi.optimizeResult(
+      optimizePreview.value,
+      optimizeTarget.value.name + '（优化版）',
+      optimizeTarget.value.tag || '职场新人',
+      optimizePositionId.value,
+    )
+    showOptimize.value = false
+    optimizeTarget.value = null
+    await load()
+  } catch (e: any) {
+    errorMsg.value = e?.message || '保存失败'
+  }
+}
+
+function cancelOptimize() {
+  optimizeAbort.value?.abort()
 }
 
 const sourceLabel = (s: string) =>
@@ -152,6 +229,9 @@ const sourceLabel = (s: string) =>
             </div>
           </div>
           <div class="flex gap-1">
+            <button class="rounded-lg p-2 text-muted transition-colors hover:bg-slate-100 hover:text-primary" title="去优化" @click="openOptimize(r)">
+              <Wand2 class="h-4 w-4" />
+            </button>
             <a :href="resumeApi.downloadUrl(r.id)" class="rounded-lg p-2 text-muted transition-colors hover:bg-slate-100 hover:text-primary" title="下载">
               <Download class="h-4 w-4" />
             </a>
@@ -163,5 +243,61 @@ const sourceLabel = (s: string) =>
       </div>
     </div>
     <p v-else class="card py-16 text-center text-sm text-muted">还没有简历，先上传或粘贴一份。</p>
+
+    <!-- 去优化弹窗：选目标岗位 → SSE 流式生成 → 落库为「已优化」 -->
+    <div
+      v-if="showOptimize"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      @click.self="!optimizeStreaming && (showOptimize = false)"
+    >
+      <div class="animate-fade-in-up w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+        <h2 class="mb-4 text-lg font-semibold text-ink">去优化：{{ optimizeTarget?.name }}</h2>
+
+        <div class="mb-4">
+          <label class="mb-1 block text-sm text-muted">目标岗位</label>
+          <select
+            v-model="optimizePositionId"
+            :disabled="optimizeStreaming"
+            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+          >
+            <option :value="undefined">不关联岗位（通用优化）</option>
+            <option v-for="p in positions" :key="p.id" :value="p.id">{{ p.title }}</option>
+          </select>
+          <p class="mt-1 text-xs text-muted">优化将结合目标岗位 JD 与你的简历上下文进行，建议选择对应岗位。</p>
+        </div>
+
+        <!-- 流式预览区 -->
+        <div class="min-h-[160px] max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-ink">
+          <span v-if="!optimizePreview && !optimizeStreaming" class="text-muted">点击「开始优化」后，这里会实时显示 AI 生成的优化版简历。</span>
+          <template v-else>{{ optimizePreview }}<span v-if="optimizeStreaming" class="stream-cursor"></span></template>
+        </div>
+
+        <p v-if="errorMsg" class="mt-3 text-sm text-danger">{{ errorMsg }}</p>
+
+        <div class="mt-5 flex justify-end gap-3">
+          <button
+            v-if="optimizeStreaming"
+            class="rounded-lg border border-slate-200 px-4 py-2 text-sm text-muted transition-colors hover:bg-white"
+            @click="cancelOptimize"
+          >
+            取消
+          </button>
+          <button
+            v-else
+            class="rounded-lg border border-slate-200 px-4 py-2 text-sm text-muted transition-colors hover:bg-white"
+            @click="showOptimize = false"
+          >
+            关闭
+          </button>
+          <button
+            :disabled="optimizeStreaming"
+            class="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primaryDark disabled:opacity-60"
+            @click="startOptimize"
+          >
+            <Wand2 class="h-4 w-4" />{{ optimizeStreaming ? '生成中…' : '开始优化' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

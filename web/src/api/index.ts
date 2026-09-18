@@ -59,11 +59,29 @@ export const resumeApi = {
   },
   paste: (content: string, name: string, tag: string, positionId?: EntityId) =>
     unwrap<EntityId>(
-      http.post('/resumes/paste', null, { params: { content, name, tag, positionId } }),
+      http.post('/resumes/paste', {
+        content,
+        name,
+        tag,
+        positionId: positionId ?? null,
+      }),
     ),
   importAi: (fileName: string, tag: string, positionId?: EntityId) =>
     unwrap<EntityId>(
       http.post('/resumes/import-ai', null, { params: { fileName, tag, positionId } }),
+    ),
+  /** 关联简历到岗位（岗位向导第二步选择已有简历时使用）。 */
+  link: (id: EntityId, positionId: EntityId) =>
+    unwrap(http.put(`/resumes/${id}/position`, null, { params: { positionId } })),
+  /** 落库 Agent 生成的优化版简历（前端 SSE 流式收集后回传）。内容较长，走 JSON 请求体。 */
+  optimizeResult: (content: string, name: string, tag: string, positionId?: EntityId) =>
+    unwrap<EntityId>(
+      http.post('/resumes/optimize', {
+        content,
+        name,
+        tag,
+        positionId: positionId ?? null,
+      }),
     ),
   remove: (id: EntityId) => unwrap(http.delete(`/resumes/${id}`)),
   downloadUrl: (id: EntityId) => `/api/resumes/${id}/download`,

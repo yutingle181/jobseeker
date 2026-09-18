@@ -15,7 +15,7 @@
 mysql -u root -p < server/src/main/resources/db/schema.sql
 ```
 
-脚本会建 10 张表，并预置 4 个招聘站点（BOSS 直聘 / 猎聘 / 智联招聘 / 前程无忧）。
+脚本会建 **11 张表**（`user` / `job_position` / `resume` / `resume_version` / `interview_session` / `interview_message` / `interview_review` / `knowledge_doc` / `job_search_record` / `job_site` / `delivery_record`），并预置 4 个招聘站点（BOSS 直聘 / 猎聘 / 智联招聘 / 前程无忧）。
 
 ## 二、启动 Python Agent（必须先起）
 
@@ -30,6 +30,9 @@ cd ..\Agent实习项目
 
 ```powershell
 cd jobseeker\server
+
+# 首次运行：把仓库根模板复制为 server 下的本地配置（含 localRepository 与镜像，不进版本库）
+copy ..\.mvn\local-settings.xml.example .mvn\local-settings.xml
 
 # 注意：本机默认 Maven 本地仓库 D:\repository\mavenrepository 无写入权限，
 # 用自带的 settings 覆盖（已指向 C:\Users\Administrator\.m2\repository）
@@ -53,6 +56,8 @@ java -jar target/jobseeker-server.jar
 | `agent.output-dir` | `../Agent实习项目/Agent_output` | AI 产物目录（**只读**） |
 | `storage.base-dir` | `./data` | 本服务文件存储（可写） |
 | `spring.datasource.*` | `jdbc:mysql://127.0.0.1:3306/jobseeker` | 数据源 |
+| `jwt.secret` | 内置默认值 | **生产必须替换** |
+| `agent.chat-cache-enabled` / `context-compress-enabled` / `metrics-enabled` | `true` | 网关响应缓存 / `user_context` 裁剪 / 指标埋点开关 |
 
 ## 四、启动前端
 
@@ -67,7 +72,7 @@ npm run dev        # http://localhost:5173
 生产构建：
 
 ```powershell
-npm run build      # 产物在 dist/
+npm run build      # 产物在 dist/；postbuild 会自动同步到 server/src/main/resources/static/（供 :8080 直接服务 UI）
 ```
 
 ## 五、Docker 一键起（不含 Agent）

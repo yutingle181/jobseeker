@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { positionApi, resumeApi, type EntityId } from '@/api'
+import { positionApi, resumeApi, type EntityId, type ResumeItem } from '@/api'
 import { Check, ArrowLeft, ArrowRight } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -32,6 +32,30 @@ const resumeText = ref('')
 const resumeTag = ref('应届生')
 const createdPositionId = ref<string | null>(null)
 
+// 第二步：可选「已有简历」或「粘贴新建」
+const resumeMode = ref<'existing' | 'paste'>('existing')
+const resumeModes = [
+  { v: 'existing', l: '选择已有简历' },
+  { v: 'paste', l: '粘贴新简历' },
+] as const
+const existingResumes = ref<ResumeItem[]>([])
+const selectedResumeId = ref<EntityId | null>(null)
+
+const sourceLabel = (s: string) =>
+  s === 'upload' ? '上传' : s === 'paste' ? '粘贴' : s === 'ai' ? 'AI 产物' : s
+
+async function loadResumes() {
+  try {
+    existingResumes.value = await resumeApi.list()
+    if (editId.value) {
+      const linked = existingResumes.value.find((r) => r.positionId === editId.value)
+      selectedResumeId.value = linked ? linked.id : null
+    }
+  } catch (e: any) {
+    errorMsg.value = e?.message || '加载简历失败'
+  }
+}
+
 // 编辑模式：进入时按 id 拉取已有数据回填，避免「编辑后信息丢失」
 onMounted(async () => {
   if (!editId.value) return
@@ -61,6 +85,7 @@ async function next() {
       return
     }
     step.value = 2
+    await loadResumes()
     return
   }
   if (step.value === 2) {
@@ -68,9 +93,14 @@ async function next() {
     try {
       if (editId.value) {
         await positionApi.update(editId.value, form.value)
+        if (selectedResumeId.value) {
+          await resumeApi.link(selectedResumeId.value, editId.value)
+        }
       } else {
         createdPositionId.value = await positionApi.create(form.value)
-        if (resumeText.value.trim()) {
+        if (resumeMode.value === 'existing' && selectedResumeId.value) {
+          await resumeApi.link(selectedResumeId.value, createdPositionId.value)
+        } else if (resumeText.value.trim()) {
           await resumeApi.paste(resumeText.value, form.value.title + '-简历', resumeTag.value, createdPositionId.value)
         }
       }
@@ -146,24 +176,64 @@ function back() {
         </div>
       </div>
 
-      <!-- 第二步：简历 -->
+      <!-- 第二步：选择简历 -->
       <div v-else-if="step === 2" class="space-y-4">
-        <div>
-          <label class="mb-1 block text-sm text-muted">粘贴简历文本（{{ resumeText.length }}/3000）</label>
-          <textarea v-model="resumeText" maxlength="3000" rows="10" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary" placeholder="直接粘贴简历内容，可留空稍后上传" />
+        <!-- 分段切换：选择已有 / 粘贴新建 -->
+        <div class="flex gap-2">
+          <button
+            v-for="m in resumeModes"
+            :key="m.v"
+            class="rounded-lg px-4 py-2 text-sm transition-colors"
+            :class="resumeMode === m.v ? 'bg-primary text-white' : 'bg-slate-100 text-muted hover:bg-slate-200'"
+            @click="resumeMode = m.v"
+          >
+            {{ m.l }}
+          </button>
         </div>
-        <div>
-          <label class="mb-1 block text-sm text-muted">身份标签</label>
-          <div class="flex gap-2">
-            <button
-              v-for="t in ['应届生', '职场新人', '资深专家']"
-              :key="t"
-              class="rounded-lg px-3 py-1.5 text-sm transition-colors"
-              :class="resumeTag === t ? 'bg-primary text-white' : 'bg-slate-100 text-muted hover:bg-slate-200'"
-              @click="resumeTag = t"
+
+        <!-- 选择已有简历 -->
+        <div v-if="resumeMode === 'existing'">
+          <p v-if="!existingResumes.length" class="text-sm text-muted">
+            还没有简历，先到「简历管理」上传或粘贴一份，或切换到「粘贴新简历」。
+          </p>
+          <div v-else class="space-y-2">
+            <label
+              v-for="r in existingResumes"
+              :key="r.id"
+              class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors"
+              :class="selectedResumeId === r.id ? 'border-primary bg-primary/5' : 'border-slate-200 hover:bg-slate-50'"
             >
-              {{ t }}
-            </button>
+              <input type="radio" :value="r.id" v-model="selectedResumeId" class="accent-primary" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-ink">{{ r.name }}</p>
+                <p class="mt-0.5 text-xs text-muted">
+                  {{ sourceLabel(r.sourceType) }} · {{ r.tag || '未标注' }} ·
+                  {{ r.status === 'optimized' ? '已优化' : '待优化' }}
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 粘贴新简历 -->
+        <div v-else class="space-y-4">
+          <div>
+            <label class="mb-1 block text-sm text-muted">粘贴简历文本（{{ resumeText.length }}/3000）</label>
+            <textarea v-model="resumeText" maxlength="3000" rows="10" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary" placeholder="直接粘贴简历内容，可留空稍后上传" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm text-muted">身份标签</label>
+            <div class="flex gap-2">
+              <button
+                v-for="t in ['应届生', '职场新人', '资深专家']"
+                :key="t"
+                class="rounded-lg px-3 py-1.5 text-sm transition-colors"
+                :class="resumeTag === t ? 'bg-primary text-white' : 'bg-slate-100 text-muted hover:bg-slate-200'"
+                @click="resumeTag = t"
+              >
+                {{ t }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

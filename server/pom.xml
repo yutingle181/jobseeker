@@ -13,7 +13,7 @@
 
     <groupId>com.jobseeker</groupId>
     <artifactId>jobseeker-server</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <name>jobseeker-server</name>
     <description>求职辅助软件后端：承接 Agent 之外的业务能力</description>
 

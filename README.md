@@ -1,8 +1,10 @@
 # AI 求职助手（jobseeker）
 
-> 当前版本 **v0.3.0**
+![AI 求职助手 Banner](docs/portfolio/assets/banner.png)
 
-![GenAI 职业助手创意海报](docs/portfolio/assets/genai-career-assistant-poster.png)
+![GenAI 职业助手 · 海报](docs/portfolio/assets/poster.png)
+
+> 当前版本 **v0.3.0**
 
 参照 OfferGoose 的求职辅助软件，**内嵌现有 Python Agent 作为独立的「AI 助手」**。
 
@@ -48,11 +50,13 @@
 ```
 jobseeker/
 ├── server/                  # Java 后端 Spring Boot 3.2.5（分层 Controller/Service/Mapper）
-│   ├── src/main/resources/db/schema.sql   # 建表脚本（含招聘站点初始数据）
-│   └── .mvn/local-settings.xml.example   # 本地 Maven 配置模板（复制为 local-settings.xml 后使用，不进库）
+│   └── src/main/resources/db/schema.sql   # 建表脚本（含招聘站点初始数据）
 ├── web/                     # Vue 3 + Vite + tdesign + Tailwind
+├── .mvn/local-settings.xml.example   # 本地 Maven 配置模板（复制为 server/.mvn/local-settings.xml 后使用，不进库）
 ├── docker-compose.yml       # 编排 mysql + server + web
 ├── start-all.ps1            # 先起 Agent 再起本软件
+├── start-backend.bat        # Windows 一键重启后端（按端口杀旧进程再 mvn spring-boot:run）
+├── scripts/                 # 运维脚本（如网关压测 bench-gateway.ps1）
 └── docs/
     ├── ARCHITECTURE.md      # 架构与关键决策
     ├── API_CONTRACT.md      # 前后端 + 后端↔Agent 接口契约
@@ -69,11 +73,11 @@ cd ..\Agent实习项目
 # 2) 建库
 mysql -u root -p < server/src/main/resources/db/schema.sql
 
-# 3) 起后端（JDK 17）
+# 3) 起后端（JDK 17） —— 新开一个终端、回到 jobseeker 目录后进入 server
 cd jobseeker\server
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
-# 首次需准备本地 Maven 配置：复制模板并按本机改 localRepository 路径（不进版本库）
-copy ..\.mvn\local-settings.xml.example ..\.mvn\local-settings.xml
+# 首次需准备本地 Maven 配置：把仓库根模板复制为 server/.mvn/local-settings.xml，并按本机改 localRepository 路径（不进版本库）
+copy ..\.mvn\local-settings.xml.example .mvn\local-settings.xml
 mvn -s .mvn/local-settings.xml spring-boot:run
 
 # 4) 起前端
@@ -83,8 +87,8 @@ npm run dev
 ```
 
 > **Windows 本机构建坑（D: 盘重命名被拦）**：部分环境 D: 盘禁止文件重命名，会导致 Maven 资源拷贝
-> `AccessDeniedException`（以及 Safe-Delete 拒绝删除 `target`）。已通过 `pom.xml` 的
-> `<build><directory>C:/jobseeker-target</directory></build>` 把构建产物改到 C: 盘绕开；
+> `AccessDeniedException`（以及 Safe-Delete 拒绝删除 `target`）。已由 `server/pom.xml` 的
+> `windows-safe-delete` profile 把**资源输出**改到 `C:/jobseeker-target/classes`（编译产物仍留在项目内 `target`）；
 > 也可用仓库根目录的 `start-backend.bat` 一键重启（按端口杀旧进程再 `mvn spring-boot:run`）。
 
 详见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。

@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jobseeker.common.BizException;
 import com.jobseeker.common.UserContext;
 import com.jobseeker.config.AgentProperties;
+import com.jobseeker.entity.JobPosition;
 import com.jobseeker.entity.Resume;
+import com.jobseeker.mapper.JobPositionMapper;
 import com.jobseeker.mapper.ResumeMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ import java.util.UUID;
 public class ResumeService {
 
     private final ResumeMapper mapper;
+    private final JobPositionMapper positionMapper;
     private final FileStorageService storage;
     private final AgentProperties agentProps;
 
@@ -87,6 +90,56 @@ public class ResumeService {
         } catch (IOException e) {
             throw new BizException("导入 AI 产物失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 把简历关联到某个岗位（简历管理 ↔ 岗位向导的桥梁）。
+     * 先校验简历归属，再校验目标岗位归属当前用户，防 IDOR 越权关联。
+     */
+    public void linkToPosition(Long resumeId, Long positionId) {
+        Resume r = detail(resumeId);
+        Long userId = UserContext.require();
+        if (positionId != null) {
+            JobPosition p = positionMapper.selectOne(new LambdaQueryWrapper<JobPosition>()
+                    .eq(JobPosition::getId, positionId)
+                    .eq(JobPosition::getUserId, userId));
+            if (p == null) {
+                throw BizException.notFound("岗位");
+            }
+        }
+        r.setPositionId(positionId);
+        mapper.updateById(r);
+    }
+
+    /**
+     * 落库一份「优化版」简历（内容来自 Agent 生成结果，由前端流式收集后回传）。
+     * 状态置为 optimized、来源标记为 ai，使简历管理的「已优化」分类有内容。
+     */
+    public Long saveOptimized(String content, String name, String tag, Long positionId) {
+        if (content == null || content.isBlank()) {
+            throw new BizException("优化结果不能为空");
+        }
+        Long userId = UserContext.require();
+        if (positionId != null) {
+            JobPosition p = positionMapper.selectOne(new LambdaQueryWrapper<JobPosition>()
+                    .eq(JobPosition::getId, positionId)
+                    .eq(JobPosition::getUserId, userId));
+            if (p == null) {
+                throw BizException.notFound("岗位");
+            }
+        }
+        Resume r = new Resume();
+        r.setUserId(userId);
+        r.setName(name == null || name.isBlank() ? "优化版简历" : name);
+        r.setFilePath(null);
+        r.setSourceType(Resume.SOURCE_AI);
+        r.setContent(content);
+        r.setTag(tag);
+        r.setPositionId(positionId);
+        r.setStatus("optimized");
+        r.setCreatedAt(LocalDateTime.now());
+        mapper.insert(r);
+        return r.getId();
     }
 
     public void delete(Long id) {
