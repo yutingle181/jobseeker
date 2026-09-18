@@ -39,6 +39,9 @@ public class DeliveryRecord {
     /** 笔试/测评说明 */
     private String examInfo;
 
+    /** 截止时间，格式 YYYY-MM-DD HH:mm（精确到分钟）；为空表示未设置 */
+    private String examDeadline;
+
     /** 最近面试时间，格式 YYYY-MM-DD */
     private String lastInterviewTime;
 
@@ -51,6 +54,9 @@ public class DeliveryRecord {
     private Long positionId;
 
     private Long resumeId;
+
+    /** 投递网址，仅允许 http/https */
+    private String applyUrl;
 
     private String remark;
 

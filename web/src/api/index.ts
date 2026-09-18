@@ -139,11 +139,15 @@ export interface Delivery {
   status: string
   interviewRound: string
   examInfo: string
+  /** 截止时间，YYYY-MM-DD HH:mm；为空表示未设置 */
+  examDeadline?: string | null
   lastInterviewTime: string
   result: string
   salary: string
   positionId?: EntityId | null
   resumeId?: EntityId | null
+  /** 投递网址，仅 http/https */
+  applyUrl?: string | null
   remark: string
   createdAt: string
 }

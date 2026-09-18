@@ -26,6 +26,9 @@ public class DeliveryRequest {
 
     private String examInfo;
 
+    /** 截止时间，格式 YYYY-MM-DD HH:mm */
+    private String examDeadline;
+
     private String lastInterviewTime;
 
     private String result;
@@ -35,6 +38,9 @@ public class DeliveryRequest {
     private Long positionId;
 
     private Long resumeId;
+
+    /** 投递网址，仅允许 http/https */
+    private String applyUrl;
 
     private String remark;
 }

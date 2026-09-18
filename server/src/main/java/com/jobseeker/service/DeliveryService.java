@@ -53,6 +53,7 @@ public class DeliveryService {
 
     public Long create(DeliveryRequest req) {
         validateStatus(req.getStatus());
+        validateApplyUrl(req.getApplyUrl());
         DeliveryRecord r = new DeliveryRecord();
         r.setUserId(UserContext.require());
         apply(r, req);
@@ -67,6 +68,7 @@ public class DeliveryService {
     public void update(Long id, DeliveryRequest req) {
         DeliveryRecord r = detail(id);
         validateStatus(req.getStatus());
+        validateApplyUrl(req.getApplyUrl());
         apply(r, req);
         mapper.updateById(r);
     }
@@ -110,11 +112,13 @@ public class DeliveryService {
         r.setStatus(req.getStatus());
         r.setInterviewRound(req.getInterviewRound());
         r.setExamInfo(req.getExamInfo());
+        r.setExamDeadline(req.getExamDeadline());
         r.setLastInterviewTime(req.getLastInterviewTime());
         r.setResult(req.getResult());
         r.setSalary(req.getSalary());
         r.setPositionId(req.getPositionId());
         r.setResumeId(req.getResumeId());
+        r.setApplyUrl(req.getApplyUrl());
         r.setRemark(req.getRemark());
     }
 
@@ -128,6 +132,17 @@ public class DeliveryService {
             }
         }
         throw new BizException(400, "非法的投递状态：" + status);
+    }
+
+    /** 投递网址只允许 http/https，避免 javascript:/data: 等被渲染成可点击链接。 */
+    private void validateApplyUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        String lower = url.trim().toLowerCase();
+        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+            throw new BizException(400, "投递网址必须以 http:// 或 https:// 开头");
+        }
     }
 
     /** 统计响应结构。 */

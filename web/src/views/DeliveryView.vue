@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import {
   deliveryApi,
   positionApi,
@@ -9,7 +9,18 @@ import {
   type Position,
   type ResumeItem,
 } from '@/api'
-import { Plus, Edit2, Trash2, Briefcase, Trophy, Activity, XCircle, X } from 'lucide-vue-next'
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Briefcase,
+  Trophy,
+  Activity,
+  XCircle,
+  X,
+  AlarmClock,
+  ExternalLink,
+} from 'lucide-vue-next'
 
 const STATUSES = [
   '待投递', '已投递', '简历筛选', '笔试', '测评',
@@ -26,7 +37,14 @@ const loading = ref(false)
 
 const statusFilter = ref('')
 const cityFilter = ref('')
+const channelFilter = ref('')
 const keyword = ref('')
+const urgencyFilter = ref('')
+const ongoingOnly = ref(false)
+const sortByDeadline = ref(false)
+
+/** 已结束的状态（"只看进行中"时排除） */
+const CLOSED_STATUSES = ['Offer', '拒信', '放弃']
 
 const posMap = computed<Record<string, string>>(() =>
   Object.fromEntries(positions.value.map((p) => [p.id, p.title])),
@@ -37,16 +55,154 @@ const resMap = computed<Record<string, string>>(() =>
 const cityOptions = computed(() =>
   Array.from(new Set(list.value.map((d) => d.city).filter(Boolean))) as string[],
 )
+const channelOptions = computed(() =>
+  Array.from(new Set(list.value.map((d) => d.channel).filter(Boolean))) as string[],
+)
 
-const filtered = computed(() =>
-  list.value.filter((d) => {
+// ---- 截止时间与紧急度 ----
+type UrgencyKey = 'overdue' | 'urgent' | 'soon' | 'week' | 'later' | 'none'
+
+const URGENCY_OPTIONS: { key: UrgencyKey; label: string }[] = [
+  { key: 'overdue', label: '已过期' },
+  { key: 'urgent', label: '24 小时内' },
+  { key: 'soon', label: '3 天内' },
+  { key: 'week', label: '7 天内' },
+  { key: 'later', label: '7 天以上' },
+  { key: 'none', label: '未设置' },
+]
+
+const URGENCY_STYLE: Record<UrgencyKey, { label: string; color: string }> = {
+  overdue: { label: '已过期', color: '#DC2626' },
+  urgent: { label: '24 小时内', color: '#DC2626' },
+  soon: { label: '3 天内', color: '#EA580C' },
+  week: { label: '7 天内', color: '#CA8A04' },
+  later: { label: '7 天以上', color: '#16A34A' },
+  none: { label: '未设置', color: '#94A3B8' },
+}
+
+const HOUR_MS = 3600 * 1000
+const DAY_MS = 24 * HOUR_MS
+
+/** 每 60s 刷新一次"现在"，使剩余时间与紧急度自动更新 */
+const now = ref(Date.now())
+
+/** 解析 'YYYY-MM-DD HH:mm'（兼容 'YYYY-MM-DDTHH:mm'）；只有日期时按当天 23:59 处理 */
+function parseDeadline(v?: string | null): Date | null {
+  if (!v) return null
+  const m = v.trim().replace('T', ' ').match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+  const d = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    m[4] ? Number(m[4]) : 23,
+    m[5] ? Number(m[5]) : 59,
+  )
+  return isNaN(d.getTime()) ? null : d
+}
+
+function urgencyOf(d: Delivery): UrgencyKey {
+  const t = parseDeadline(d.examDeadline)
+  if (!t) return 'none'
+  const diff = t.getTime() - now.value
+  if (diff < 0) return 'overdue'
+  if (diff <= DAY_MS) return 'urgent'
+  if (diff <= 3 * DAY_MS) return 'soon'
+  if (diff <= 7 * DAY_MS) return 'week'
+  return 'later'
+}
+
+/** '还剩 2 天 3 小时' / '已过期 1 天' */
+function remainingText(d: Delivery): string {
+  const t = parseDeadline(d.examDeadline)
+  if (!t) return ''
+  const raw = t.getTime() - now.value
+  const overdue = raw < 0
+  const diff = Math.abs(raw)
+  const days = Math.floor(diff / DAY_MS)
+  const hours = Math.floor((diff % DAY_MS) / HOUR_MS)
+  const mins = Math.floor((diff % HOUR_MS) / 60000)
+  let body: string
+  if (days > 0) body = `${days} 天${hours > 0 ? ` ${hours} 小时` : ''}`
+  else if (hours > 0) body = `${hours} 小时${mins > 0 ? ` ${mins} 分` : ''}`
+  else body = `${mins} 分钟`
+  return overdue ? `已过期 ${body}` : `还剩 ${body}`
+}
+
+/** 3 天内截止（含已逾期）的记录 */
+const dueSoon = computed(() =>
+  list.value.filter((d) => ['overdue', 'urgent', 'soon'].includes(urgencyOf(d))),
+)
+const overdueCount = computed(
+  () => list.value.filter((d) => urgencyOf(d) === 'overdue').length,
+)
+
+const filtered = computed(() => {
+  const rows = list.value.filter((d) => {
     if (statusFilter.value && d.status !== statusFilter.value) return false
     if (cityFilter.value && d.city !== cityFilter.value) return false
+    if (channelFilter.value && d.channel !== channelFilter.value) return false
+    if (urgencyFilter.value === 'due3') {
+      if (!['overdue', 'urgent', 'soon'].includes(urgencyOf(d))) return false
+    } else if (urgencyFilter.value && urgencyOf(d) !== urgencyFilter.value) {
+      return false
+    }
+    if (ongoingOnly.value && CLOSED_STATUSES.includes(d.status)) return false
     const k = keyword.value.trim().toLowerCase()
     if (k && !`${d.companyName || ''} ${d.jobTitle}`.toLowerCase().includes(k)) return false
     return true
-  }),
+  })
+  if (!sortByDeadline.value) return rows
+  return [...rows].sort((a, b) => {
+    const ta = parseDeadline(a.examDeadline)?.getTime() ?? Number.POSITIVE_INFINITY
+    const tb = parseDeadline(b.examDeadline)?.getTime() ?? Number.POSITIVE_INFINITY
+    return ta - tb
+  })
+})
+
+const hasFilter = computed(
+  () =>
+    !!(
+      keyword.value ||
+      statusFilter.value ||
+      cityFilter.value ||
+      channelFilter.value ||
+      urgencyFilter.value ||
+      ongoingOnly.value ||
+      sortByDeadline.value
+    ),
 )
+
+function resetFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  cityFilter.value = ''
+  channelFilter.value = ''
+  urgencyFilter.value = ''
+  ongoingOnly.value = false
+  sortByDeadline.value = false
+}
+
+/** 点提醒横幅：筛出 3 天内截止（含已逾期）的记录 */
+function showDueSoon() {
+  urgencyFilter.value = 'due3'
+}
+
+/** 生成可点击外链前先校验协议：仅放行 http/https，避免 javascript: / data: */
+function safeUrl(url?: string | null): string {
+  const u = (url || '').trim()
+  return /^https?:\/\//i.test(u) ? u : ''
+}
+
+/** datetime-local 值（YYYY-MM-DDTHH:mm）与库中存储值（YYYY-MM-DD HH:mm）互转 */
+function toLocalInput(v?: string | null): string {
+  if (!v) return ''
+  return v.trim().replace(' ', 'T').slice(0, 16)
+}
+function fromLocalInput(v?: string | null): string {
+  if (!v) return ''
+  return v.trim().replace('T', ' ').slice(0, 16)
+}
 
 async function loadAll() {
   loading.value = true
@@ -69,6 +225,16 @@ async function loadAll() {
   }
 }
 onMounted(loadAll)
+
+let tickTimer: number | undefined
+onMounted(() => {
+  tickTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 60000)
+})
+onUnmounted(() => {
+  if (tickTimer) window.clearInterval(tickTimer)
+})
 
 function statusTagClass(s: string): string {
   if (s === 'Offer') return 'bg-green-100 text-green-700'
@@ -101,7 +267,7 @@ function openCreate() {
 }
 function openEdit(d: Delivery) {
   editingId.value = d.id
-  form.value = { ...d }
+  form.value = { ...d, examDeadline: toLocalInput(d.examDeadline) }
   formError.value = ''
   showDialog.value = true
 }
@@ -111,9 +277,15 @@ async function save() {
     formError.value = '岗位不能为空'
     return
   }
+  const url = (form.value.applyUrl || '').trim()
+  if (url && !/^https?:\/\//i.test(url)) {
+    formError.value = '投递网址必须以 http:// 或 https:// 开头'
+    return
+  }
+  const payload = { ...form.value, examDeadline: fromLocalInput(form.value.examDeadline) }
   try {
-    if (editingId.value) await deliveryApi.update(editingId.value, form.value)
-    else await deliveryApi.create(form.value)
+    if (editingId.value) await deliveryApi.update(editingId.value, payload)
+    else await deliveryApi.create(payload)
     showDialog.value = false
     await loadAll()
   } catch (e: any) {
@@ -183,6 +355,25 @@ async function remove(d: Delivery) {
         <p class="text-sm font-medium text-ink">状态分布</p>
         <p class="text-xs text-muted">共 {{ stats?.total ?? 0 }} 条</p>
       </div>
+
+      <!-- 临近截止提醒：3 天内（含已逾期） -->
+      <div
+        v-if="dueSoon.length"
+        class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800"
+      >
+        <AlarmClock class="h-4 w-4 shrink-0 text-orange-600" />
+        <span>
+          有 <b class="tabular-nums">{{ dueSoon.length }}</b> 项将在 3 天内截止（含
+          <b class="tabular-nums">{{ overdueCount }}</b> 项已逾期）
+        </span>
+        <button
+          class="ml-auto rounded-md border border-orange-300 px-2 py-0.5 transition-colors hover:bg-orange-100"
+          @click="showDueSoon"
+        >
+          只看这些
+        </button>
+      </div>
+
       <div v-if="stats" class="flex flex-wrap gap-2">
         <span
           v-for="(count, st) in stats.byStatus"
@@ -201,27 +392,68 @@ async function remove(d: Delivery) {
       </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <input
-        v-model="keyword"
-        class="w-48 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
-        placeholder="搜索公司 / 岗位"
-      />
-      <select
-        v-model="statusFilter"
-        class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
-      >
-        <option value="">全部状态</option>
-        <option v-for="s in STATUSES" :key="s" :value="s">{{ s }}</option>
-      </select>
-      <select
-        v-model="cityFilter"
-        class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
-      >
-        <option value="">全部城市</option>
-        <option v-for="c in cityOptions" :key="c" :value="c">{{ c }}</option>
-      </select>
+    <!-- 顶部筛选栏 -->
+    <div class="card mb-4 p-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <input
+          v-model="keyword"
+          class="w-48 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+          placeholder="搜索公司 / 岗位"
+        />
+        <select
+          v-model="urgencyFilter"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+        >
+          <option value="">全部紧急度</option>
+          <option value="due3">3 天内（含已逾期）</option>
+          <option v-for="u in URGENCY_OPTIONS" :key="u.key" :value="u.key">{{ u.label }}</option>
+        </select>
+        <select
+          v-model="statusFilter"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+        >
+          <option value="">全部状态</option>
+          <option v-for="s in STATUSES" :key="s" :value="s">{{ s }}</option>
+        </select>
+        <select
+          v-model="channelFilter"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+        >
+          <option value="">全部渠道</option>
+          <option v-for="c in channelOptions" :key="c" :value="c">{{ c }}</option>
+        </select>
+        <select
+          v-model="cityFilter"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+        >
+          <option value="">全部城市</option>
+          <option v-for="c in cityOptions" :key="c" :value="c">{{ c }}</option>
+        </select>
+        <label class="flex cursor-pointer items-center gap-1.5 text-sm text-muted">
+          <input
+            v-model="ongoingOnly"
+            type="checkbox"
+            class="h-4 w-4 accent-[#2f6fbf]"
+          />只看进行中
+        </label>
+        <label class="flex cursor-pointer items-center gap-1.5 text-sm text-muted">
+          <input
+            v-model="sortByDeadline"
+            type="checkbox"
+            class="h-4 w-4 accent-[#2f6fbf]"
+          />按截止时间排序
+        </label>
+        <button
+          v-if="hasFilter"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-muted transition-colors hover:bg-slate-50"
+          @click="resetFilters"
+        >
+          重置
+        </button>
+        <span class="ml-auto text-xs text-muted">
+          筛选出 {{ filtered.length }} / 共 {{ list.length }} 条
+        </span>
+      </div>
     </div>
 
     <!-- 列表 -->
@@ -238,6 +470,7 @@ async function remove(d: Delivery) {
             <th class="px-4 py-3">城市</th>
             <th class="px-4 py-3">渠道</th>
             <th class="px-4 py-3">投递日期</th>
+            <th class="px-4 py-3">截止时间</th>
             <th class="px-4 py-3">状态</th>
             <th class="px-4 py-3">面试轮次</th>
             <th class="px-4 py-3">薪资</th>
@@ -252,6 +485,17 @@ async function remove(d: Delivery) {
             <td class="px-4 py-3 text-muted">{{ d.channel || '—' }}</td>
             <td class="px-4 py-3 text-muted">{{ d.deliverDate || '—' }}</td>
             <td class="px-4 py-3">
+              <div v-if="d.examDeadline" class="whitespace-nowrap text-xs">
+                <span class="font-medium" :style="{ color: URGENCY_STYLE[urgencyOf(d)].color }">
+                  {{ d.examDeadline }}
+                </span>
+                <span class="ml-1.5" :style="{ color: URGENCY_STYLE[urgencyOf(d)].color }">
+                  · {{ remainingText(d) }}
+                </span>
+              </div>
+              <span v-else class="text-muted">—</span>
+            </td>
+            <td class="px-4 py-3">
               <span
                 class="rounded-full px-2 py-0.5 text-xs font-medium"
                 :class="statusTagClass(d.status)"
@@ -261,6 +505,16 @@ async function remove(d: Delivery) {
             <td class="px-4 py-3 text-muted">{{ d.salary || '—' }}</td>
             <td class="px-4 py-3">
               <div class="flex justify-end gap-2">
+                <a
+                  v-if="safeUrl(d.applyUrl)"
+                  :href="safeUrl(d.applyUrl)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="rounded-lg p-1.5 text-muted transition-colors hover:bg-slate-100 hover:text-primary"
+                  title="打开投递网址"
+                >
+                  <ExternalLink class="h-4 w-4" />
+                </a>
                 <button
                   class="rounded-lg p-1.5 text-muted transition-colors hover:bg-slate-100 hover:text-primary"
                   title="编辑"
@@ -371,6 +625,14 @@ async function remove(d: Delivery) {
             />
           </div>
           <div>
+            <label class="mb-1 block text-xs text-muted">截止时间（提醒用）</label>
+            <input
+              v-model="form.examDeadline"
+              type="datetime-local"
+              class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </div>
+          <div>
             <label class="mb-1 block text-xs text-muted">结果去向</label>
             <input
               v-model="form.result"
@@ -404,6 +666,14 @@ async function remove(d: Delivery) {
               <option :value="null">不关联</option>
               <option v-for="r in resumes" :key="r.id" :value="r.id">{{ r.name }}</option>
             </select>
+          </div>
+          <div class="col-span-2">
+            <label class="mb-1 block text-xs text-muted">投递网址</label>
+            <input
+              v-model="form.applyUrl"
+              class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+              placeholder="https://... （仅支持 http / https）"
+            />
           </div>
           <div class="col-span-2">
             <label class="mb-1 block text-xs text-muted">备注</label>
