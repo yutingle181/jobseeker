@@ -78,19 +78,14 @@ function statusTagClass(s: string): string {
   if (['拒信', '放弃'].includes(s)) return 'bg-red-100 text-red-700'
   return 'bg-slate-100 text-slate-600'
 }
-function statusBarColor(s: string): string {
+// 状态色：Offer 绿 / 已投递 黄 / 面试流程各轮 蓝 / 拒信·放弃 红 / 其余 灰
+function statusColor(s: string): string {
   if (s === 'Offer') return '#16A34A'
   if (s === '已投递') return '#CA8A04'
   if (['笔试', '测评', '一面', '二面', '三面', 'HR面'].includes(s)) return '#2563EB'
   if (['拒信', '放弃'].includes(s)) return '#DC2626'
   return '#94A3B8'
 }
-
-const maxStatusCount = computed(() => {
-  if (!stats.value) return 1
-  const v = Object.values(stats.value.byStatus)
-  return Math.max(1, ...v)
-})
 
 // ---- 新增 / 编辑对话框 ----
 const showDialog = ref(false)
@@ -182,20 +177,27 @@ async function remove(d: Delivery) {
       </div>
     </div>
 
-    <!-- 状态分布 -->
+    <!-- 状态分布：阶段徽标流（非零上色高亮，为 0 弱化为描边） -->
     <div class="card mb-6 p-5">
-      <p class="mb-4 text-sm font-medium text-ink">状态分布</p>
-      <div v-if="stats" class="space-y-2">
-        <div v-for="(count, st) in stats.byStatus" :key="st" class="flex items-center gap-3">
-          <span class="w-16 shrink-0 text-xs text-muted">{{ st }}</span>
-          <div class="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div
-              class="h-full rounded-full transition-all"
-              :style="{ width: (count / maxStatusCount) * 100 + '%', background: statusBarColor(st) }"
-            />
-          </div>
-          <span class="w-8 shrink-0 text-right text-xs text-ink">{{ count }}</span>
-        </div>
+      <div class="mb-4 flex items-baseline justify-between">
+        <p class="text-sm font-medium text-ink">状态分布</p>
+        <p class="text-xs text-muted">共 {{ stats?.total ?? 0 }} 条</p>
+      </div>
+      <div v-if="stats" class="flex flex-wrap gap-2">
+        <span
+          v-for="(count, st) in stats.byStatus"
+          :key="st"
+          class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors"
+          :class="
+            count > 0
+              ? 'border-transparent font-medium text-white'
+              : 'border-slate-200 bg-slate-50 text-slate-400'
+          "
+          :style="count > 0 ? { background: statusColor(st) } : undefined"
+        >
+          {{ st }}
+          <span class="font-semibold tabular-nums">{{ count }}</span>
+        </span>
       </div>
     </div>
 
