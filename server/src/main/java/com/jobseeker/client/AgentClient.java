@@ -1,5 +1,6 @@
 package com.jobseeker.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jobseeker.client.dto.AgentSessionDetail;
 import com.jobseeker.common.BizException;
@@ -18,6 +19,8 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -142,6 +145,45 @@ public class AgentClient {
             return objectMapper.readValue(json, AgentSessionDetail.class);
         } catch (Exception e) {
             throw new BizException(502, "解析 Agent 会话失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 把一段已有的面试记录交给 Agent 的 interview_review 模式，生成结构化复盘 Markdown。
+     *
+     * 复用现有 POST /chat（mode=interview_review），解析返回 JSON 的 message 字段。
+     * Agent 不可达 / 超时 / 返回为空都会抛 BizException，由调用方决定回退策略。
+     *
+     * @param transcript   面试记录文本（面试官与候选人的问答）
+     * @param userContext  可选岗位 JD 等上下文，用于让复盘贴合岗位
+     * @return 复盘 Markdown（含「面试复盘 / 追问链 / 薄弱点 / 改进动作」小标题）
+     */
+    public String generateReview(String transcript, String userContext) {
+        String body;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("query", transcript);
+            payload.put("mode", "interview_review");
+            if (userContext != null && !userContext.isBlank()) {
+                payload.put("user_context", userContext);
+            }
+            body = objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            throw new BizException(502, "构造复盘请求失败：" + e.getMessage());
+        }
+
+        String resp = post("/chat", body);
+        try {
+            JsonNode node = objectMapper.readTree(resp);
+            String message = node.path("message").asText(null);
+            if (message == null || message.isBlank()) {
+                throw new BizException(502, "Agent 复盘返回为空");
+            }
+            return message;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(502, "解析 Agent 复盘失败：" + e.getMessage());
         }
     }
 

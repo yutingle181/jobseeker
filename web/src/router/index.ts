@@ -10,6 +10,7 @@ const routes = [
   { path: '/reviews', name: 'reviews', component: () => import('@/views/ReviewView.vue') },
   { path: '/jobs', name: 'jobs', component: () => import('@/views/JobFinderView.vue') },
   { path: '/knowledge', name: 'knowledge', component: () => import('@/views/KnowledgeView.vue') },
+  { path: '/deliveries', name: 'deliveries', component: () => import('@/views/DeliveryView.vue') },
 ]
 
 const router = createRouter({

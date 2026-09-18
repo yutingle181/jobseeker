@@ -17,6 +17,7 @@ const navs = [
   { name: 'reviews', label: '面试复盘' },
   { name: 'jobs', label: '找职位' },
   { name: 'knowledge', label: '知识库' },
+  { name: 'deliveries', label: '投递进度' },
 ]
 
 const isLogin = computed(() => route.name === 'login')

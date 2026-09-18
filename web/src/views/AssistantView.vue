@@ -49,6 +49,7 @@ const resumeId = ref<string | undefined>(undefined)
 const positions = ref<Position[]>([])
 const resumes = ref<ResumeItem[]>([])
 const archived = ref(false)
+const archiving = ref(false)
 const errorMsg = ref('')
 
 const currentPosition = computed(() => positions.value.find((p) => p.id === positionId.value))
@@ -154,12 +155,15 @@ async function send() {
 }
 
 async function archive() {
-  if (!sessionId.value) return
+  if (!sessionId.value || archiving.value) return
+  archiving.value = true
   try {
     await interviewApi.archive(sessionId.value, positionId.value)
     archived.value = true
   } catch (e: any) {
     errorMsg.value = e?.message || '归档失败'
+  } finally {
+    archiving.value = false
   }
 }
 
@@ -199,10 +203,11 @@ function resetAll() {
           </select>
           <button
             v-if="sessionId && !archived"
-            class="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm text-white transition-colors hover:bg-primaryDark"
+            class="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm text-white transition-colors hover:bg-primaryDark disabled:opacity-60"
+            :disabled="archiving"
             @click="archive"
           >
-            <Archive class="h-3.5 w-3.5" />归档到复盘
+            <Archive class="h-3.5 w-3.5" />{{ archiving ? '正在生成复盘…' : '归档到复盘' }}
           </button>
           <span v-else-if="archived" class="text-sm text-success">已归档</span>
           <button

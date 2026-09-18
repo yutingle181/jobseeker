@@ -111,6 +111,44 @@ export const knowledgeApi = {
   remove: (id: EntityId) => unwrap(http.delete(`/knowledge-docs/${id}`)),
 }
 
+export interface Delivery {
+  id: EntityId
+  companyName: string
+  jobTitle: string
+  city: string
+  channel: string
+  deliverDate: string
+  status: string
+  interviewRound: string
+  examInfo: string
+  lastInterviewTime: string
+  result: string
+  salary: string
+  positionId?: EntityId | null
+  resumeId?: EntityId | null
+  remark: string
+  createdAt: string
+}
+
+export interface DeliveryStats {
+  total: number
+  offerCount: number
+  interviewingCount: number
+  rejectedCount: number
+  byStatus: Record<string, number>
+  byCity: Record<string, number>
+  byChannel: Record<string, number>
+}
+
+export const deliveryApi = {
+  list: () => unwrap<Delivery[]>(http.get('/deliveries')),
+  get: (id: EntityId) => unwrap<Delivery>(http.get(`/deliveries/${id}`)),
+  create: (data: Partial<Delivery>) => unwrap<EntityId>(http.post('/deliveries', data)),
+  update: (id: EntityId, data: Partial<Delivery>) => unwrap(http.put(`/deliveries/${id}`, data)),
+  remove: (id: EntityId) => unwrap(http.delete(`/deliveries/${id}`)),
+  stats: () => unwrap<DeliveryStats>(http.get('/deliveries/stats')),
+}
+
 /**
  * 一次工具调用事件（Agent 侧 Function Calling 的可视化素材）。
  *

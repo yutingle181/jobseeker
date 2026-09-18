@@ -10,6 +10,7 @@ import com.jobseeker.dto.ArchiveRequest;
 import com.jobseeker.entity.InterviewMessage;
 import com.jobseeker.entity.InterviewReview;
 import com.jobseeker.entity.InterviewSession;
+import com.jobseeker.entity.JobPosition;
 import com.jobseeker.entity.JobSearchRecord;
 import com.jobseeker.mapper.InterviewMessageMapper;
 import com.jobseeker.mapper.InterviewReviewMapper;
@@ -42,6 +43,7 @@ public class InterviewService {
     private final InterviewMessageMapper messageMapper;
     private final InterviewReviewMapper reviewMapper;
     private final AgentClient agentClient;
+    private final PositionService positionService;
 
     /**
      * 归档：幂等。同一个 agentSessionId 重复归档不会产生重复消息。
@@ -88,6 +90,21 @@ public class InterviewService {
         }
         if (!batch.isEmpty()) {
             messageMapper.insertBatch(batch);
+        }
+
+        // 模拟面试会话：归档时自动让 Agent 基于整段记录生成结构化复盘，
+        // 用户无需手动切换「面试复盘」模式或粘贴问答。失败则回退到原始 lastAssistant。
+        if ("mock_interview".equals(detail.getMode())) {
+            try {
+                String transcript = buildTranscript(msgs);
+                String ctx = resolveUserContext(req.getPositionId());
+                String generated = agentClient.generateReview(transcript, ctx);
+                if (generated != null && !generated.isBlank()) {
+                    lastAssistant = generated;
+                }
+            } catch (Exception e) {
+                log.warn("自动复盘失败，回退原始逻辑：{}", e.getMessage());
+            }
         }
 
         InterviewReview review = new InterviewReview();
@@ -186,5 +203,53 @@ public class InterviewService {
         return line.replaceFirst("^[-*#\\s•]+", "")
                 .replaceFirst("^\\[[ xX]\\]\\s*", "")
                 .trim();
+    }
+
+    /**
+     * 把 Agent 会话消息拼成「面试官 / 候选人」交替的面试记录文本，
+     * 作为 interview_review 模式的输入。空内容跳过，保证不会喂空 query。
+     */
+    private String buildTranscript(List<AgentMessage> msgs) {
+        if (msgs == null || msgs.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("以下是一次模拟面试的完整记录，请按复盘要求给出结构化复盘：\n\n");
+        for (AgentMessage m : msgs) {
+            String role = "assistant".equalsIgnoreCase(m.getRole()) ? "面试官" : "候选人";
+            String content = m.getContent() == null ? "" : m.getContent();
+            if (content.isBlank()) {
+                continue;
+            }
+            sb.append(role).append("：").append(content).append("\n\n");
+        }
+        String text = sb.toString().trim();
+        return text.isBlank() ? "" : text;
+    }
+
+    /**
+     * 把归档关联的岗位 JD 拼成 user_context，让复盘贴合岗位；
+     * 无关联岗位或读取失败时返回 null（不阻断归档）。
+     */
+    private String resolveUserContext(Long positionId) {
+        if (positionId == null) {
+            return null;
+        }
+        try {
+            JobPosition p = positionService.detail(positionId);
+            if (p == null) {
+                return null;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("岗位：").append(p.getTitle() == null ? "" : p.getTitle()).append("\n");
+            if (p.getDescription() != null && !p.getDescription().isBlank()) {
+                sb.append("JD：\n").append(p.getDescription()).append("\n");
+            }
+            String text = sb.toString().trim();
+            return text.isBlank() ? null : text;
+        } catch (Exception e) {
+            log.warn("读取岗位上下文失败，复盘不含 JD：{}", e.getMessage());
+            return null;
+        }
     }
 }

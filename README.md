@@ -1,6 +1,6 @@
 # AI 求职助手（jobseeker）
 
-> 当前版本 **v0.2.0**
+> 当前版本 **v0.3.0**
 
 ![GenAI 职业助手创意海报](docs/portfolio/assets/genai-career-assistant-poster.png)
 
@@ -30,6 +30,7 @@
 | 职位搜索记录 | 保存检索与结果（`source=agent` 强制带免责说明） |
 | 知识库文档 | 上传文档归属与列表（建库问答在 Agent 侧） |
 | 招聘网站入口 | 站点配置 + 安全外链拼接 |
+| 投递进度管理 | 秋招投递台账：列表增删改、12 状态枚举 + 面试轮次、关联岗位/简历、后端聚合统计看板（总投递 / Offer / 面试中 / 拒信 与 状态 / 城市 / 渠道分布） |
 | 网关可观测 | TTFT / P95 / 缓存命中率 + **工具调用次数与耗时分布**（`GET /agent/gateway-metrics`） |
 
 ## AI 助手上下文注入（user_context）

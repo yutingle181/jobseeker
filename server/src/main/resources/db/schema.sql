@@ -144,3 +144,26 @@ UPDATE job_site SET icon = 'boss.svg'    WHERE name = 'BOSS 直聘';
 UPDATE job_site SET icon = 'liepin.svg'  WHERE name = '猎聘';
 UPDATE job_site SET icon = 'zhaopin.svg' WHERE name = '智联招聘';
 UPDATE job_site SET icon = 'job51.svg'   WHERE name = '前程无忧';
+
+-- 秋招投递进度（替代手工 Excel，按用户归属隔离）
+CREATE TABLE IF NOT EXISTS delivery_record (
+    id                  BIGINT      PRIMARY KEY AUTO_INCREMENT,
+    user_id             BIGINT      NOT NULL,
+    company_name        VARCHAR(128),
+    job_title           VARCHAR(128),
+    city                VARCHAR(64),
+    channel             VARCHAR(32),
+    deliver_date        VARCHAR(10),
+    status              VARCHAR(16) DEFAULT '待投递',
+    interview_round     VARCHAR(32),
+    exam_info           VARCHAR(255),
+    last_interview_time VARCHAR(10),
+    result              VARCHAR(128),
+    salary              VARCHAR(64),
+    position_id         BIGINT,
+    resume_id           BIGINT,
+    remark              TEXT,
+    created_at          DATETIME,
+    INDEX idx_delivery_user (user_id),
+    INDEX idx_delivery_user_status (user_id, status)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
