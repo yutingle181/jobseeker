@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS delivery_record (
     interview_round     VARCHAR(32),
     exam_info           VARCHAR(255),
     exam_deadline       VARCHAR(16),
+    exam_done           TINYINT(1) DEFAULT 0,
     last_interview_time VARCHAR(10),
     result              VARCHAR(128),
     salary              VARCHAR(64),

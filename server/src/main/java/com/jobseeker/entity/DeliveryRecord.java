@@ -42,6 +42,9 @@ public class DeliveryRecord {
     /** 截止时间，格式 YYYY-MM-DD HH:mm（精确到分钟）；为空表示未设置 */
     private String examDeadline;
 
+    /** 是否已完成测评：勾选后不再展示截止倒计时，也不参与「即将截止」提醒 */
+    private Boolean examDone;
+
     /** 最近面试时间，格式 YYYY-MM-DD */
     private String lastInterviewTime;
 

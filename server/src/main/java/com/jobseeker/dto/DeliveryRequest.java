@@ -29,6 +29,9 @@ public class DeliveryRequest {
     /** 截止时间，格式 YYYY-MM-DD HH:mm */
     private String examDeadline;
 
+    /** 是否已完成测评 */
+    private Boolean examDone;
+
     private String lastInterviewTime;
 
     private String result;

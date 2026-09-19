@@ -113,6 +113,7 @@ public class DeliveryService {
         r.setInterviewRound(req.getInterviewRound());
         r.setExamInfo(req.getExamInfo());
         r.setExamDeadline(req.getExamDeadline());
+        r.setExamDone(Boolean.TRUE.equals(req.getExamDone()));
         r.setLastInterviewTime(req.getLastInterviewTime());
         r.setResult(req.getResult());
         r.setSalary(req.getSalary());

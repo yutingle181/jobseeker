@@ -141,6 +141,8 @@ export interface Delivery {
   examInfo: string
   /** 截止时间，YYYY-MM-DD HH:mm；为空表示未设置 */
   examDeadline?: string | null
+  /** 是否已完成测评：勾选后不再显示截止倒计时，也不参与即将截止提醒 */
+  examDone?: boolean | null
   lastInterviewTime: string
   result: string
   salary: string

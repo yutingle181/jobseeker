@@ -129,13 +129,33 @@ function remainingText(d: Delivery): string {
   return overdue ? `已过期 ${body}` : `还剩 ${body}`
 }
 
-/** 3 天内截止（含已逾期）的记录 */
+/** 3 天内截止（含已逾期）的记录；已完成测评的不再提醒 */
 const dueSoon = computed(() =>
-  list.value.filter((d) => ['overdue', 'urgent', 'soon'].includes(urgencyOf(d))),
+  list.value.filter((d) => !d.examDone && ['overdue', 'urgent', 'soon'].includes(urgencyOf(d))),
 )
 const overdueCount = computed(
-  () => list.value.filter((d) => urgencyOf(d) === 'overdue').length,
+  () => list.value.filter((d) => !d.examDone && urgencyOf(d) === 'overdue').length,
 )
+
+/** 已测评后的下一步提示（按当前状态补全） */
+const EXAM_DONE_NEXT: Record<string, string> = {
+  待投递: '待投递',
+  已投递: '待筛选简历',
+  简历筛选: '待筛选简历',
+  笔试: '待笔试',
+  测评: '待下一步',
+  一面: '待一面',
+  二面: '待二面',
+  三面: '待三面',
+  HR面: '待HR面',
+  Offer: '已出结果',
+  拒信: '已出结果',
+  放弃: '已放弃',
+}
+
+function examDoneText(d: Delivery): string {
+  return EXAM_DONE_NEXT[d.status] || (d.status ? `待${d.status}` : '待下一步')
+}
 
 const filtered = computed(() => {
   const rows = list.value.filter((d) => {
@@ -143,9 +163,14 @@ const filtered = computed(() => {
     if (cityFilter.value && d.city !== cityFilter.value) return false
     if (channelFilter.value && d.channel !== channelFilter.value) return false
     if (urgencyFilter.value === 'due3') {
+      // 已完成测评的不再算「即将截止」
+      if (d.examDone) return false
       if (!['overdue', 'urgent', 'soon'].includes(urgencyOf(d))) return false
-    } else if (urgencyFilter.value && urgencyOf(d) !== urgencyFilter.value) {
-      return false
+    } else if (urgencyFilter.value === 'examDone') {
+      if (!d.examDone) return false
+    } else if (urgencyFilter.value) {
+      if (d.examDone) return false
+      if (urgencyOf(d) !== urgencyFilter.value) return false
     }
     if (ongoingOnly.value && CLOSED_STATUSES.includes(d.status)) return false
     const k = keyword.value.trim().toLowerCase()
@@ -406,6 +431,7 @@ async function remove(d: Delivery) {
         >
           <option value="">全部紧急度</option>
           <option value="due3">3 天内（含已逾期）</option>
+          <option value="examDone">已测评</option>
           <option v-for="u in URGENCY_OPTIONS" :key="u.key" :value="u.key">{{ u.label }}</option>
         </select>
         <select
@@ -485,7 +511,11 @@ async function remove(d: Delivery) {
             <td class="px-4 py-3 text-muted">{{ d.channel || '—' }}</td>
             <td class="px-4 py-3 text-muted">{{ d.deliverDate || '—' }}</td>
             <td class="px-4 py-3">
-              <div v-if="d.examDeadline" class="whitespace-nowrap text-xs">
+              <div v-if="d.examDone" class="whitespace-nowrap text-xs">
+                <span class="font-medium text-emerald-600">已测评</span>
+                <span class="text-muted">，{{ examDoneText(d) }}</span>
+              </div>
+              <div v-else-if="d.examDeadline" class="whitespace-nowrap text-xs">
                 <span class="font-medium" :style="{ color: URGENCY_STYLE[urgencyOf(d)].color }">
                   {{ d.examDeadline }}
                 </span>
@@ -631,6 +661,13 @@ async function remove(d: Delivery) {
               type="datetime-local"
               class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
             />
+          </div>
+          <div class="col-span-2">
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-ink">
+              <input v-model="form.examDone" type="checkbox" class="h-4 w-4 accent-[#16A34A]" />
+              已完成测评
+              <span class="text-xs text-muted">（勾选后不再显示截止倒计时，也不计入即将截止提醒）</span>
+            </label>
           </div>
           <div>
             <label class="mb-1 block text-xs text-muted">结果去向</label>
