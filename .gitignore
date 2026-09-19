@@ -20,6 +20,9 @@ dist/
 # 源码在 web/，产物不入库（static/icons/ 是站点图标源码，保留）。
 server/src/main/resources/static/assets/
 server/src/main/resources/static/index.html
+# 站点图标（favicon）源码在 web/public/，static 根下的副本同样是 postbuild 产物
+server/src/main/resources/static/favicon.*
+server/src/main/resources/static/apple-touch-icon.png
 
 # IDE
 .idea/
