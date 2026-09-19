@@ -573,7 +573,9 @@ async function remove(d: Delivery) {
       @click.self="showDialog = false"
     >
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-        <div class="mb-4 flex items-center justify-between">
+        <div
+          class="sticky top-0 z-10 -mx-6 -mt-6 mb-4 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4"
+        >
           <h2 class="text-lg font-semibold text-ink">{{ editingId ? '编辑投递' : '新增投递' }}</h2>
           <button class="rounded-lg p-1.5 text-muted hover:bg-slate-100" @click="showDialog = false">
             <X class="h-5 w-5" />
@@ -724,7 +726,9 @@ async function remove(d: Delivery) {
 
         <p v-if="formError" class="mt-3 text-sm text-danger">{{ formError }}</p>
 
-        <div class="mt-5 flex justify-end gap-3">
+        <div
+          class="sticky bottom-0 z-10 -mx-6 -mb-6 mt-5 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"
+        >
           <button
             class="rounded-lg border border-slate-200 px-4 py-2 text-sm text-muted transition-colors hover:bg-slate-50"
             @click="showDialog = false"
