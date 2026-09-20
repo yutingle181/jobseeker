@@ -48,6 +48,7 @@
 - **提交前别用 `git add -A`**：`web/node_modules/`、`server/target/`、`web/dist/`、后端静态产物（`static/assets/`、`static/index.html`、`favicon.*`）等都被忽略，但仍建议显式 `git add <path>`。
 - **CI 会跑单元测试**（`.github/workflows/ci.yml` 的 `Run tests` 步骤）：本地改完后端代码，提交前先跑一次 `mvn -s .mvn/local-settings.xml test`。
 - **依赖更新走 Dependabot**（每周一）：minor/patch 归组一条 PR、major 单独开 PR；CI 的 action 版本过期也会被它盯住。
+- **`master` 已开分支保护（禁强推 / 禁删除）**：2026-09-20 起生效——改代码一律走「分支 → PR → CI 绿 → 合并」，别直接往 master 提交；建议把 CI 的构建 / 测试检查设为必需状态检查（**别把"只告警不阻断"那类检查设成必需**，否则自相矛盾）。**代价是 master 不能再 `git push --force`**：若将来需要再次改写历史，**必须先到 `Settings → Rules` 临时关闭规则**，改完再开回。自查是否生效：仓库首页若还出现「Your master branch isn't protected」提示，就是没开。
 
 ## 六、踩坑记录
 
