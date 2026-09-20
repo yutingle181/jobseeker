@@ -1,0 +1,42 @@
+version: 2
+# 依赖更新策略：
+# - minor / patch 归组为一条 PR（降低噪音）；major 单独开 PR（需要人看一眼再合）。
+# - 每周一跑一次，避免随时插队打断手头工作。
+updates:
+  # 后端：Maven（Spring Boot / MyBatis-Plus / JDBC 等）
+  - package-ecosystem: "maven"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "backend"]
+    groups:
+      maven-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # 前端：npm（Vue / Vite / Pinia 等）
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # CI 自身：workflow 里用到的 actions（版本过期会触发 Node 运行时弃用告警）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "ci"]
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
