@@ -1,6 +1,12 @@
 version: 2
 # 依赖更新策略：
-# - minor / patch 归组为一条 PR（降低噪音）；major 单独开 PR（需要人看一眼再合）。
+# - minor / patch 归组为一条 PR（降低噪音）。
+# - major（大版本）**不开 PR**：实测 major 几乎必然破坏现有代码 ——
+#   Spring Boot 3.2→4.1、Vite 5.4→8.3、vue-router 4.6→5.3 三条 PR 的 CI 全红。
+#   这类升级属「需单独立项的迁移」，开了只会堆一批红 PR 当噪音。
+#   **注意**：忽略 PR 不等于看不到信息 —— Dependabot 仍会在
+#   Insights → Dependency graph → Dependabot 里标注「N major version available」，
+#   要主动升级时从那里看，比被动收红 PR 更清楚。
 # - 每周一跑一次，避免随时插队打断手头工作。
 updates:
   # 后端：Maven（Spring Boot / MyBatis-Plus / JDBC 等）
@@ -15,6 +21,10 @@ updates:
       maven-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # 大版本单独立项迁移（见 docs/DEV_NOTES.md「偏离默认」一节）
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # 前端：npm（Vue / Vite / Pinia 等）
   - package-ecosystem: "npm"
@@ -28,8 +38,13 @@ updates:
       npm-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # CI 自身：workflow 里用到的 actions（版本过期会触发 Node 运行时弃用告警）
+  # 这一项【不忽略 major】—— 升 action 大版本是低风险且必要的（v6→v7 正是为了摆脱弃用告警），
+  # 与"业务依赖的大版本迁移"不是一回事。
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
