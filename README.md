@@ -63,6 +63,21 @@ jobseeker/
 
 ## 快速开始
 
+### 一键启动（推荐）
+
+```powershell
+.\start-all.ps1                 # 有 Docker → docker compose；无 Docker → 本机进程（Agent :8000/:8501 + 后端 :8080 + 前端 :5173）
+.\start-all.ps1 -SkipWeb        # 只起 Agent + 后端
+.\start-all.ps1 -Mode local     # 强制本机进程方式（-Mode docker 反之）
+.\stop-all.ps1                  # 停止本次启动的进程；-Force 连同占用这四个端口的一起停
+```
+
+它比手敲多做了几件事：**前置检查**（JDK 17 / Maven / Node / MySQL 缺哪个当场说清）→ **幂等**（已在监听的端口直接跳过，不重复起进程）→ 日志集中到 `_runlogs\`、失败自动打印尾部 → 启动完再读一次 `/health`，模型额度或网络不通时会明确告诉你「服务已起，但 AI 回答会走降级」，而不是对着空回答猜。前端首次启动若被安全软件打断依赖预构建（esbuild 退出），脚本会清 `node_modules/.vite` 自动重试一次。
+
+> 本机若没有容器运行时（如当前开发机），脚本会自动走本机进程方式，无需手动改。
+
+### 手动分步（等价，便于排查）
+
 ```powershell
 # 1) 先起 Python Agent（在平行目录）
 cd ..\Agent实习项目
