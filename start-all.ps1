@@ -27,6 +27,10 @@
 .PARAMETER TimeoutSeconds
   单个服务的等待上限，默认 240 秒。
 
+.PARAMETER AgentPython
+  指定 Agent 使用的 python.exe。默认自动挑「装了 langgraph-checkpoint-sqlite」的那个环境
+  （.venv / .venv-ci 中优先可用的），避免 checkpoint 静默降级成 memory。
+
 .EXAMPLE
   .\start-all.ps1                 # 有 Docker 走 Docker，没有就走本地
 .EXAMPLE
@@ -39,7 +43,8 @@ param(
     [ValidateSet('auto', 'docker', 'local')][string]$Mode = 'auto',
     [switch]$SkipAgent,
     [switch]$SkipWeb,
-    [int]$TimeoutSeconds = 240
+    [int]$TimeoutSeconds = 240,
+    [string]$AgentPython = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -92,11 +97,24 @@ function New-Logged([string]$exe, [string[]]$arguments, [string]$workDir, [strin
     [void]$started.Add(@{ Tag = $tag; Pid = $p.Id; Id = $tag + '(' + $p.Id + ')' })
     return $p
 }
+function Test-AgentHasSqliteSaver([string]$python) {
+    $out = & $python -c "import importlib.util as u; print('1' if u.find_spec('langgraph.checkpoint.sqlite') else '0')" 2>$null
+    return (($out -join '') -match '1')
+}
 function Resolve-AgentPython {
+    # 按「能力」挑，而不是按目录顺序挑：2026-10-12 实测 .venv 里**没装**
+    # langgraph-checkpoint-sqlite（可选依赖只在开发环境装），若直接取 .venv，
+    # Agent 起来后 checkpoint 会静默降级成 memory —— 与 P1-4 已验证的跨进程恢复能力不符。
+    if ($AgentPython) { return $AgentPython }
+    $cands = @()
     foreach ($v in @('.venv', '.venv-ci')) {
         $p = Join-Path $agentDir "$v\Scripts\python.exe"
-        if (Test-Path $p) { return $p }
+        if (Test-Path $p) { $cands += $p }
     }
+    foreach ($c in $cands) {
+        if (Test-AgentHasSqliteSaver $c) { return $c }
+    }
+    if ($cands.Count -gt 0) { $script:agentNoSqlite = $true; return $cands[0] }
     return $null
 }
 
@@ -180,6 +198,10 @@ elseif ((Test-Port 8000) -and (Test-Port 8501)) {
             Write-Warn2 'Agent 下没有 .venv / .venv-ci，请先在 Agent 目录跑 .\run_api.ps1 让它自动建环境'
         } else {
             Write-Ok ('Python 环境：' + $py)
+            if ($script:agentNoSqlite) {
+                Write-Warn2 '该环境没装 langgraph-checkpoint-sqlite → checkpoint 会降级为 memory（仅进程内有效，跨进程恢复不可用）'
+                Write-Warn2 '要启用跨进程恢复：用装了开发依赖的环境，或显式指定 -AgentPython <python.exe 路径>'
+            }
             if (Test-Port 8000) { Write-Warn2 ':8000 已在监听，跳过 API' }
             else {
                 $api = New-Logged $py @('-m', 'uvicorn', 'src.api.main:app', '--host', '127.0.0.1', '--port', '8000') $agentDir 'agent-api'
