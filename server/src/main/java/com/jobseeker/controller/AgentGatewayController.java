@@ -3,7 +3,7 @@ package com.jobseeker.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.jobseeker.cache.ChatResponseCache;
+import com.jobseeker.cache.ChatCache;
 import com.jobseeker.client.AgentClient;
 import com.jobseeker.common.BizException;
 import com.jobseeker.metrics.GatewayMetrics;
@@ -48,7 +48,8 @@ public class AgentGatewayController {
     private final AgentClient agentClient;
     private final AgentContextService contextService;
     private final ObjectMapper objectMapper;
-    private final ChatResponseCache cache;
+    /** 缓存后端由 ChatCacheRouter 决定（Redis / 进程内自动降级），控制器不关心用的是哪个。 */
+    private final ChatCache cache;
     private final GatewayMetrics metrics;
 
     /** SSE 里工具调用事件的类型值，用于在转发热路径上做「零解析」快速过滤。 */

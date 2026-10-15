@@ -51,4 +51,84 @@ public class AgentProperties {
 
     /** 指标滑动窗口容量（保留最近 N 条样本用于算分位，超界淘汰最旧） */
     private int metricsMaxSamples = 2000;
+
+    /**
+     * Redis 接入配置（缓存 / 分布式锁 / 限流三件套的载体）。
+     *
+     * **默认不启用**：{@code enabled=false} 时 RedisConfig 不装配、不建连接池，
+     * 服务在没装 Redis 的机器上照常启动，并自动降级为进程内实现
+     * （缓存→InMemoryChatCache，锁→进程内 ReentrantLock，限流→进程内计数）。
+     * 这是「可选能力不拖垮启动」的落点：装不装 Redis 由部署方决定，代码两条路都验证过。
+     */
+    private Redis redis = new Redis();
+
+    /** 接口限流配置（按登录用户或来源 IP 计窗口请求数）。 */
+    private RateLimit rateLimit = new RateLimit();
+
+    public Redis getRedis() {
+        return redis;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
+    }
+
+    /** Redis 连接与行为参数。 */
+    @Data
+    public static class Redis {
+        /** 总开关。false 时不建任何 Redis 连接，也不注册相关 Bean。 */
+        private boolean enabled = false;
+
+        private String host = "127.0.0.1";
+
+        private int port = 6379;
+
+        /** 空表示无密码（本机开发常见）。 */
+        private String password = "";
+
+        private int database = 0;
+
+        /** 单次命令超时（毫秒）。宁短不宁长：限流/锁这类热路径不能陪 Redis 一起卡。 */
+        private int timeoutMs = 1000;
+
+        /** 连接超时（毫秒）。 */
+        private int connectTimeoutMs = 1000;
+
+        private int poolMaxTotal = 32;
+
+        private int poolMaxIdle = 8;
+
+        private int poolMinIdle = 2;
+
+        /** key 前缀：与其他应用共用同一 Redis 时避免串数据。 */
+        private String keyPrefix = "jobseeker:";
+
+        /**
+         * 健康探测间隔（秒）；0 表示只在启动时探一次。
+         * 探测失败会把 Redis 侧实现降级为进程内实现并告警（恢复后自动切回）。
+         */
+        private int healthCheckSeconds = 30;
+    }
+
+    /** 限流参数。固定窗口：窗口内超过 maxRequests 即返回 429。 */
+    @Data
+    public static class RateLimit {
+        /** 是否启用。Redis 不可用时自动降级为进程内计数（不会变成"无限流"）。 */
+        private boolean enabled = true;
+
+        /** 统计窗口长度（秒）。 */
+        private int windowSeconds = 60;
+
+        /** 单用户（或单 IP）在窗口内的最大请求数。 */
+        private int maxRequests = 60;
+
+        /** true 按登录用户维度；false 按来源 IP（未登录场景）。 */
+        private boolean perUser = true;
+
+        /** 429 响应里的 Retry-After 秒数。 */
+        private int retryAfterSeconds = 60;
+
+        /** 限流统计 key 前缀。 */
+        private String keyPrefix = "jobseeker:rl:";
+    }
 }

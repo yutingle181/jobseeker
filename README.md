@@ -43,11 +43,64 @@
 
 效果：模拟面试 / 简历制作 / 职位搜索等能力能直接结合用户岗位与简历作答；`user_context` 为空时行为与旧版一致。
 
+## 缓存 / 分布式锁 / 限流（Redis 三件套，默认关闭）
+
+后端对 Agent 的三项保护能力，**默认全部不启用 Redis**：不装 Redis 的机器照常启动，
+三项各自降级为进程内实现，并在启动日志里明确写出当前后端（不会静默降级 ✗）。
+
+| 能力 |  Redis 版 | 降级版（Redis 不可用时） | 解决什么问题 |
+| --- | --- | --- | --- |
+| 响应缓存 | `RedisChatCache`（TTL，跨实例共享） | `ChatResponseCache`（进程内 LRU） | 相同 query 直接命中，省掉整轮 Agent/LLM 调用 |
+| 分布式锁 | `RedisLock`（`SET NX EX` + Lua 原子释放） | `LocalLock`（进程内 `ReentrantLock`） | 缓存击穿：并发同 key 只放一个去问 Agent，其余等它回写后命中 |
+| 接口限流 | `RedisRateLimiter`（`INCR`+`EXPIRE` 一段 Lua） | `LocalRateLimiter`（进程内固定窗口） | 单个用户打满会拖垮所有人并烧光 LLM 配额；超限返回 429 + `Retry-After` |
+
+配置（`server/src/main/resources/application.yml`，默认值如下）：
+
+```yaml
+agent:
+  redis:
+    enabled: false          # true 才装配 Redis 连接（不建连接 = 启动零噪音）
+    host: 127.0.0.1
+    port: 6379
+    password:
+    key-prefix: jobseeker:
+    health-check-seconds: 30   # 故障后按此间隔尝试自动恢复
+  rate-limit:
+    enabled: true           # 注意：这是"限流功能"开关，与 Redis 无关
+    window-seconds: 60
+    max-requests: 60
+    per-user: true          # false 则按来源 IP
+```
+
+打开方式：装好 Redis 后把 `agent.redis.enabled` 改为 `true`（或用环境变量
+`AGENT_REDIS_ENABLED=true`），重启即可，无需改代码。
+
+**观察当前实际后端**（降级是静默的，必须给观察口 ✗）：
+
+```powershell
+curl http://127.0.0.1:8080/agent/backends
+# {"redisEnabled":false,"redisHealthy":false,"cache":"memory","lock":"local","rateLimit":"local"}
+```
+
+三个刻意的取舍（面试常被追问，先说清）：
+
+1. **缓存不做空值防穿透**：缓存值是「一次完整的 LLM 回答」而不是数据库行，
+   未命中的真正开销由分布式锁兜底，再叠空值标记收益接近零；
+2. **锁不上看门狗 / 不做红锁**：单机 Redis + 演示规模下，Redlock 的代价大于收益；
+   临界区必须远短于 TTL，这一点写在接口注释里；
+3. **限流是固定窗口**：Redis 侧一次 `INCR` 成本最低，代价是窗口边界可能两倍突发；
+   要更严格可换令牌桶，接口不变。
+
 ## 目录
 
 ```
 jobseeker/
 ├── server/                  # Java 后端 Spring Boot 3.2.5（分层 Controller/Service/Mapper）
+│   ├── src/main/java/com/jobseeker/cache/       # 响应缓存：接口 + Redis 版 + 进程内版 + 降级路由
+│   ├── src/main/java/com/jobseeker/lock/        # 分布式锁：SET NX EX + Lua 释放 + 进程内降级
+│   ├── src/main/java/com/jobseeker/ratelimit/   # 限流：INCR+EXPIRE Lua + 进程内降级 + 拦截器
+│   ├── src/main/java/com/jobseeker/redis/       # Redis 可用性探测（三件套共用一份）
+│   └── src/test/java/com/jobseeker/             # 单测：44 条（JUnit5 + Mockito，无需 Redis）
 │   └── src/main/resources/db/schema.sql   # 建表脚本（含招聘站点初始数据）
 ├── web/                     # Vue 3 + Vite + tdesign + Tailwind
 ├── .mvn/local-settings.xml.example   # 本地 Maven 配置模板（复制为 server/.mvn/local-settings.xml 后使用，不进库）
@@ -59,6 +112,13 @@ jobseeker/
     ├── ARCHITECTURE.md      # 架构与关键决策
     ├── API_CONTRACT.md      # 前后端 + 后端↔Agent 接口契约
     └── DEPLOY.md            # 部署步骤与已知坑
+```
+
+跑测试（JDK 17，本机约 10 秒，不需要 Redis / MySQL）：
+
+```powershell
+cd server
+mvn -s .mvn/local-settings.xml test
 ```
 
 ## 快速开始
