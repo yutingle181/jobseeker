@@ -77,6 +77,16 @@
 | POST | `/agent/knowledge/{kb}/ingest` | `POST /knowledge/{kb}/ingest`（multipart） |
 | DELETE | `/agent/knowledge/{kb}` | `DELETE /knowledge/{kb}` |
 
+后端自有（不转发给 Agent）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/agent/backends` | 当前缓存 / 锁 / 限流各自跑在哪个后端（`redis` / `local` / `memory`），降级是否发生 |
+| GET | `/agent/gateway-metrics` | 端到端监控基线快照（首 token / P95 / 缓存命中率 / 工具调用） |
+
+> 超限时返回 `429` + `Retry-After`（`agent.rate-limit.*` 控制阈值），body 为
+> `{"code":429,"message":"请求过于频繁，请稍后再试"}`。
+
 ## 二、Java 后端 ↔ Python Agent
 
 > **Agent 接口没有 `/api` 前缀**（旧文档写 `/api/chat` 是错的，已在 Agent 工程 README 修正）。

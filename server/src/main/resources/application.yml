@@ -48,6 +48,31 @@ agent:
   # ---- 端到端监控基线（首 token 延迟 / P95 + 缓存命中率，9.2.D）----
   metrics-enabled: ${AGENT_METRICS_ENABLED:true}
   metrics-max-samples: ${AGENT_METRICS_MAX_SAMPLES:2000}
+  # ---- Redis（缓存 / 分布式锁 / 限流三件套的载体）----
+  # 默认 false：不装配 RedisConfig、不建连接池，服务在没装 Redis 的机器上照常启动，
+  # 并自动降级为进程内实现（缓存→内存 LRU，锁→ReentrantLock，限流→内存计数），
+  # 降级时会打日志并在 /agent/gateway-metrics 里可见当前生效后端。
+  redis:
+    enabled: ${AGENT_REDIS_ENABLED:false}
+    host: ${AGENT_REDIS_HOST:127.0.0.1}
+    port: ${AGENT_REDIS_PORT:6379}
+    password: ${AGENT_REDIS_PASSWORD:}
+    database: ${AGENT_REDIS_DB:0}
+    timeout-ms: ${AGENT_REDIS_TIMEOUT_MS:1000}
+    connect-timeout-ms: ${AGENT_REDIS_CONNECT_TIMEOUT_MS:1000}
+    pool-max-total: ${AGENT_REDIS_POOL_MAX:32}
+    pool-max-idle: ${AGENT_REDIS_POOL_MAX_IDLE:8}
+    pool-min-idle: ${AGENT_REDIS_POOL_MIN_IDLE:2}
+    key-prefix: ${AGENT_REDIS_KEY_PREFIX:jobseeker:}
+    health-check-seconds: ${AGENT_REDIS_HEALTH_CHECK_SECONDS:30}
+  # ---- 接口限流（固定窗口；Redis 不可用时降级为进程内计数，不会变成"无限流"）----
+  rate-limit:
+    enabled: ${AGENT_RATE_LIMIT_ENABLED:true}
+    window-seconds: ${AGENT_RATE_LIMIT_WINDOW_SECONDS:60}
+    max-requests: ${AGENT_RATE_LIMIT_MAX_REQUESTS:60}
+    per-user: ${AGENT_RATE_LIMIT_PER_USER:true}
+    retry-after-seconds: ${AGENT_RATE_LIMIT_RETRY_AFTER:60}
+    key-prefix: ${AGENT_RATE_LIMIT_KEY_PREFIX:jobseeker:rl:}
 
 # ---- 本服务文件存储 ----
 storage:

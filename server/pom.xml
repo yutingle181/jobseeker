@@ -97,6 +97,21 @@
             <version>${okhttp.version}</version>
         </dependency>
 
+        <!--
+            Redis（缓存 / 分布式锁 / 限流三件套的载体）。
+            默认 agent.redis.enabled=false：此时 RedisConfig 不装配、不建连接池，
+            服务在「没装 Redis」的机器上照常启动并自动降级为进程内实现（见 cache/ 与 lock/）。
+            连接池走 commons-pool2；Lettuce 本身随 starter-data-redis 带入。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
         <!-- 工具 -->
         <dependency>
             <groupId>org.projectlombok</groupId>

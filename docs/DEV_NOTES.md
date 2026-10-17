@@ -8,7 +8,7 @@
 
 - 项目名称：jobseeker（AI 求职助手 · 平台侧：Vue3 前端 + Spring Boot 网关）
 - 版本号：0.3.0（三处一致：`README.md` / `web/package.json` / `server/pom.xml`，门禁会校验）
-- 技术栈：Vue3 · Vite · TypeScript · Pinia · Vue Router · Java 17 · Spring Boot · MyBatis-Plus · MySQL
+- 技术栈：Vue3 · Vite · TypeScript · Pinia · Vue Router · Java 17 · Spring Boot · MyBatis-Plus · MySQL · Redis（可选，默认关闭）
 - 仓库根目录：D:\project\jobseeker
 - 姊妹仓库：`gen-ai-career-assistant-agent`（AI 服务，FastAPI + LangGraph）——平台侧通过 `/agent/**` 薄网关转发过去
 
@@ -56,3 +56,37 @@
 > 每条记录包含：日期 / 现象 / 原因 / 解决 / 标签。
 
 <!-- 新记录由脚本自动追加到本行下方 -->
+
+### 2026-10-15 Lettuce 连接池/超时的三个 API 坑（编译报错才逼出来）
+
+- 现象：`RedisConfig` 编译连错三次，都是"找不到符号"。
+- 原因与解决：
+  1. `LettuceConnectionFactory.setPoolConfig(...)` **不存在**于当前版本 —— 连接池要走
+     `LettucePoolingClientConfiguration.builder().poolConfig(...)`；
+  2. `ClientOptions.Builder.commandTimeout(Duration)` 与 `LettucePoolingClientConfiguration.Builder`
+     也都没有这个方法 —— 命令超时正确写法是
+     `ClientOptions.builder().timeoutOptions(TimeoutOptions.builder().fixedTimeout(...).build())`；
+  3. `RedisCallback` 在 `org.springframework.data.redis.**core**` 包，不是 `.connection`
+     （后者是 `RedisConnection`）—— 两者名字极像，IDE 自动导入极易选错。
+- 判据：`mvn -s .mvn/local-settings.xml test` 编译通过。
+- 标签：spring-data-redis,lettuce,连接池,编译错误
+
+### 2026-10-15 Mockito 打桩 void 方法：`when(...)` 直接编译失败
+
+- 现象：测试编译报「此处不允许使用 '空' 类型」，共 4 处。
+- 原因：`ValueOperations.set(...)` 等是 **void 方法**，`when(voidCall())` 非法；
+  `lenient().when(voidCall())` 同样非法。
+- 解决：void 方法一律 `doNothing().when(mock).method(...)` / `doThrow(...).when(mock).method(...)`。
+- 连带收获：这条坑顺带暴露了一个**桩与实现不匹配** —— 实现用 `set(k, v, millis, TimeUnit)`
+  重载、桩打 `set(k, v, Duration)`，导致"Redis 写失败应降级"的用例假绿；
+  已把实现统一到 `Duration` 重载（少一次单位换算，也不给传错单位留口子）。
+- 标签：mockito,void方法,单测
+
+### 2026-10-15 降级必须可观察，否则等于没有
+
+- 现象/决策：缓存、锁、限流都会在 Redis 不可用时自动降级，而降级是**静默**的（请求照常成功）。
+  若只做到"能降级"，就会出现「以为在用分布式锁，其实早就是进程内锁」的情况 ——
+  多实例部署下这两者语义差别很大。
+- 解决：① 三件套共用一份 `RedisHealthProbe`（避免"缓存说 Redis 活着、锁说它死了"）；
+  ② 启动/降级/恢复三条路径都打日志；③ 新增只读端点 `GET /agent/backends` 暴露当前后端。
+- 标签：降级,可观测性,redis

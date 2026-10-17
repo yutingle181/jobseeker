@@ -32,7 +32,10 @@ Entity/DO   与表一一对应
 
 旁路两个组件：
 - `client/AgentClient`：调 Python Agent（同步 / SSE / multipart / 拉会话）
-- `gateway/AgentGatewayController`：`/agent/**` **纯透传**，不做任何业务加工
+- `gateway/AgentGatewayController`：`/agent/**` **纯透传，外加三项保护能力**（响应缓存 / 分布式锁 / 接口限流），
+  三者都以「Redis 可用 → 用 Redis；不可用 → 进程内实现并告警」的方式降级，
+  默认 `agent.redis.enabled=false`，不装 Redis 的机器零报错启动（见 README「Redis 三件套」）。
+  当前实际后端可从 `GET /agent/backends` 观察 —— 降级是静默的，必须给观察口。
 
 ## 关键设计决策
 
