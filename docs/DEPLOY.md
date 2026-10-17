@@ -11,9 +11,15 @@
 ## 一、准备数据库
 
 ```powershell
-# 先建库与表（脚本内含 CREATE DATABASE）
-mysql -u root -p < server/src/main/resources/db/schema.sql
+# 建一个空库即可 —— 表结构由应用启动时的 Flyway 自动完成 ✓✓
+# （V1 建 11 张表 + V2~V4 增量，见 README「数据库迁移」一节）
+mysql -u root -p -e "CREATE DATABASE jobseeker DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
+
+> 2026-10-17 起**不再需要手工执行 SQL** ✓✗ —— 此前这里是
+> `mysql -u root -p < server/src/main/resources/db/schema.sql`，
+> 而那份脚本**只含 V1**（不含 `exam_done` / `exam_deadline` / `apply_url` 三列与五个联合索引 ✗），
+> 所以按老文档部署出来的环境一直是缺列的 ✗✗。这也是引入 Flyway 的直接原因 ✓。
 
 脚本会建 **11 张表**（`user` / `job_position` / `resume` / `resume_version` / `interview_session` / `interview_message` / `interview_review` / `knowledge_doc` / `job_search_record` / `job_site` / `delivery_record`），并预置 4 个招聘站点（BOSS 直聘 / 猎聘 / 智联招聘 / 前程无忧）。
 

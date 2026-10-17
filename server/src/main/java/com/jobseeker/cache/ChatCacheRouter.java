@@ -37,10 +37,16 @@ public class ChatCacheRouter implements ChatCache {
     private volatile ChatCache active;
 
     public ChatCacheRouter(AgentProperties props,
-                           ChatResponseCache memory,
                            RedisHealthProbe health,
                            ObjectProvider<StringRedisTemplate> redisProvider) {
-        this.memory = memory;
+        // 进程内缓存**自己 new**，不再由 Spring 注入成 Bean。
+        // 原因（2026-10-17 真机验证时暴露）：ChatResponseCache 原先挂着 @Component，
+        // 而它也 implements ChatCache —— 于是容器里有两个 ChatCache bean，
+        // AgentGatewayController 按接口注入时直接报 "required a single bean, but 2 were found" 起不来。
+        // 进程内缓存是路由器的**内部实现细节**，暴露成 bean 只会带来歧义：
+        // 以后每加一个 ChatCache 实现，都会再撞一次同样的错。
+        this.memory = new ChatResponseCache(
+                props.isChatCacheEnabled(), props.getChatCacheMaxSize(), props.getChatCacheTtlSeconds());
         this.health = health;
         StringRedisTemplate template = props.getRedis().isEnabled() ? redisProvider.getIfAvailable() : null;
         this.redis = template != null ? new RedisChatCache(template, props) : null;

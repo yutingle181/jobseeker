@@ -1,7 +1,6 @@
 package com.jobseeker.cache;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -21,7 +20,9 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  *   本实现自身仍保持无锁，避免进程内缓存引入锁竞争。
  */
 @Slf4j
-@Component
+// 刻意**不加** @Component：这是 ChatCacheRouter 的内部实现细节，由 Router 自己 new。
+// 2026-10-17 之前它挂着 @Component 且 implements ChatCache，导致容器里出现两个 ChatCache bean，
+// AgentGatewayController 按接口注入时直接起不来（"required a single bean, but 2 were found"）。
 public class ChatResponseCache implements ChatCache {
 
     private final boolean enabled;

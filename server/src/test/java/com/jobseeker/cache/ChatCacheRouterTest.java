@@ -62,7 +62,7 @@ class ChatCacheRouterTest {
     @DisplayName("Redis 未启用：直接用进程内缓存，且根本不问 Redis 要 Template")
     void disabledUsesMemoryWithoutTouchingRedis() {
         AgentProperties props = props(false);
-        ChatCacheRouter router = new ChatCacheRouter(props, memory(), probe(props), provider);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
 
         assertEquals("memory", router.activeBackend());
         // 关键：未启用时不得向 Spring 索取 Template（否则等于建了连接）
@@ -82,7 +82,7 @@ class ChatCacheRouterTest {
         when(ops.get(anyString())).thenReturn("1");
         when(template.delete(anyString())).thenReturn(true);
 
-        ChatCacheRouter router = new ChatCacheRouter(props, memory(), probe(props), provider);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
 
         assertEquals("redis", router.activeBackend());
     }
@@ -95,7 +95,7 @@ class ChatCacheRouterTest {
         when(template.execute(any(org.springframework.data.redis.core.RedisCallback.class)))
                 .thenThrow(new RuntimeException("connection refused"));
 
-        ChatCacheRouter router = new ChatCacheRouter(props, memory(), probe(props), provider);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
 
         assertEquals("memory", router.activeBackend());
     }
@@ -112,7 +112,7 @@ class ChatCacheRouterTest {
         when(ops.get(anyString())).thenReturn("1");
         when(template.delete(anyString())).thenReturn(true);
 
-        ChatCacheRouter router = new ChatCacheRouter(props, memory(), probe(props), provider);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
         String key = router.buildKey("{\"query\":\"你好\"}");
 
         // 先让 Redis 读失败
@@ -137,7 +137,7 @@ class ChatCacheRouterTest {
         when(ops.get(anyString())).thenReturn("1");
         when(template.delete(anyString())).thenReturn(true);
 
-        ChatCacheRouter router = new ChatCacheRouter(props, memory(), probe(props), provider);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
         String key = router.buildKey("{\"query\":\"你好\"}");
 
         // Redis 写失败：不得把异常抛给调用方（缓存写失败不该让用户的提问失败）
@@ -151,11 +151,15 @@ class ChatCacheRouterTest {
     }
 
     @Test
-    @DisplayName("isEnabled 跟随当前后端：内存实现关闭时整体关闭")
+    @DisplayName("isEnabled 跟随当前后端：内存缓存关闭时整体关闭")
     void isEnabledFollowsActiveBackend() {
-        AgentProperties props = props(false);
-        ChatResponseCache off = new ChatResponseCache(false, 10, 300);
-        ChatCacheRouter router = new ChatCacheRouter(props, off, probe(props), provider);
+        // 2026-10-17：这里原来是「new 一个 enabled=false 的 ChatResponseCache 塞进路由」，
+        // 但进程内缓存已改成由路由自己按 props 创建（否则容器里两个 ChatCache bean 会二义 ✓✗），
+        // 于是注入式写法失效。改成直接关 props —— **语义等价且更贴近真实**：
+        // 真实场景里关缓存就是改 agent.chat-cache-enabled ✓✓
+        AgentProperties props = props(true);
+        props.setChatCacheEnabled(false);
+        ChatCacheRouter router = new ChatCacheRouter(props, probe(props), provider);
         assertTrue(!router.isEnabled(), "内存缓存关闭时，路由也应报告未启用（控制器据此跳过缓存）");
     }
 }

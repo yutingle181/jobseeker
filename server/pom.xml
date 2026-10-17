@@ -23,6 +23,22 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <!-- 钉死 Flyway 版本，不让它跟着 Spring Boot 的 BOM 漂移。
+
+             本机 MySQL 已于 2026-10-17 从 5.7 升级到 8.0.28（in-place upgrade ✓✓
+             —— 三个库、11 张表、行数逐表核对一致 ✓✓），因此这条版本约束的**原始动机已消失**：
+             · Flyway 社区版对 MySQL 5.7 的限制比想象中早得多 ✗ —— 实测 9.0.1 / 9.16.3 /
+               9.22.3 **全部**报 "MySQL 5.7 is no longer supported by Flyway Community Edition" ✓✗
+             · 升级到 8.0 后，9.22.3（Spring Boot 3.2.5 默认版本 ✓）开箱可用 ✓✓
+
+             但**仍然钉版本**，理由换成了更普适的一条：引入带"版本-平台支持矩阵"的工具时，
+             版本不能默默跟着 BOM 漂 ✗ —— 今天换成需要更老 MySQL 的组件时，
+             BOM 一升环境就起不来 ✓✗。显式钉住，意图可查 ✓。
+
+             顺带记一条原则（这次的真教训）：**别让一个工具反过来逼着所有人升级数据库** ✗ ——
+             当时若盲目追新到 10.x，等于给项目加了"必须 MySQL 8.0+"的隐性约束，
+             而 docker-compose 里明明是 8.0、本机却是 5.7，这种漂移早就存在，只是没被暴露 ✓。 -->
+        <flyway.version>9.22.3</flyway.version>
         <jjwt.version>0.12.5</jjwt.version>
         <okhttp.version>4.12.0</okhttp.version>
         <lombok.version>1.18.32</lombok.version>
@@ -64,6 +80,34 @@
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 数据库迁移：把「改表结构靠人手执行 SQL」变成「启动时按版本自动执行」。
+
+             为什么需要它（2026-10-16 实测）：
+             仓库里有 schema.sql（全量建表）+ 三个手工增量脚本
+             （add_delivery_exam_done / add_delivery_deadline_url / add_list_indexes）。
+             手工方案的真实问题不是"麻烦"，而是**状态不可查**：本机库上三个脚本都已执行，
+             但**从代码和 Git 里完全看不出来**——只有连上库逐个查列才知道。
+             文件名与实际列名还不一致（add_delivery_deadline_url 实际加的是
+             exam_deadline + apply_url），靠文件名推断更会出错。
+
+             Flyway 的取舍：
+             · 迁移文件带版本号，Flyway 记在 flyway_schema_history 表里，谁执行过一目了然；
+             · **baseline-on-migrate**：已有库只标版本不重跑（数据零改动，零风险）；
+             · 全新库则从 V1 顺序执行，最终结构与老库**完全一致**（这是手工方案做不到的）。
+
+             注意：Flyway 9+ 把各数据库的支持拆成独立模块，MySQL 必须显式加 flyway-mysql，
+             否则启动报 "Unsupported Database: MySQL 5.7"。 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+            <version>${flyway.version}</version>
         </dependency>
 
         <!-- 鉴权 -->

@@ -90,3 +90,70 @@
 - 解决：① 三件套共用一份 `RedisHealthProbe`（避免"缓存说 Redis 活着、锁说它死了"）；
   ② 启动/降级/恢复三条路径都打日志；③ 新增只读端点 `GET /agent/backends` 暴露当前后端。
 - 标签：降级,可观测性,redis
+
+### 2026-10-17 Flyway 落地：5 个坑，其中 2 个是「单测全绿但真机起不来」
+
+- 背景：把「改表结构靠手工执行 SQL」换成 Flyway（V1 全量建表 + V2/V3/V4 三个增量），
+  并顺手把本机 MySQL 从 5.7 升级到 8.0.28（in-place upgrade）。
+
+#### 坑 1：两个装配 bug，mvn test 全绿但**应用根本起不来**
+
+- 现象 A：WebMvcConfig 构造器需要 RateLimitInterceptor，容器里找不到，启动失败。
+- 现象 B（修完 A 才暴露）：AgentGatewayController 需要单个 ChatCache bean，但容器里有两个 ——
+  chatCacheRouter（新路由）和 chatResponseCache（旧实现）。
+- 共同根因：**漏/多了 @Component**。而所有用例都是自己 new 或用 mock，
+  **没有一个真的让 Spring 解析这两个类型**，所以单测一条也测不出来。
+- 修复：RateLimitInterceptor 补 @Component；ChatResponseCache **去掉** @Component ——
+  它是 ChatCacheRouter 的内部实现细节，不该暴露成 bean，改由 Router 自己按 props 创建。
+- 判据：真启动一次，GET /agent/backends 应返回三件套各自的当前后端
+  （实测 {"redisEnabled":false,"cache":"memory","lock":"local","rateLimit":"local"}）。
+
+#### 坑 2：BeanWiringTest 的覆盖盲区 —— 它只查了 @Configuration
+
+- 原先扫的是 @Configuration 的构造器注入点，**漏了 Controller/Service**，
+  也漏了「一个接口多个实现」这个 Spring 最典型的坑（坑 1-B 正是它）。
+- 补了一条：扫 cache/lock/ratelimit 三个包，同一接口超过一个实现且多个带 @Component 就失败。
+- 教训：这类「装配体检」必须覆盖「接口多实现」，不能只查「注入点有没有 bean」——
+  后者只覆盖「没有实现」，不覆盖「有多个实现」。
+
+#### 坑 3：Flyway 迁移文件里，**注释中的英文分号会把 SQL 截断**
+
+- 现象：Migration V1__init_schema.sql failed，报错指向 DEFAULT CHARACTER SET utf8mb4。
+- 根因：Flyway **先按分号切分语句，再剥离注释** —— 所以注释行里的 USE jobseeker;
+  会被当成语句分隔符，把后面的内容切成一个不完整语句。
+- 修复：注释里不要写英文分号（中文分号不受影响）。
+- 这条极隐蔽：报错位置指向的是**下一行**，而不是注释本身。
+
+#### 坑 4：脚本改写多行 SQL 时只删了第一行，留下孤儿（我自己的 bug）
+
+- 根因：schema.sql 里 CREATE DATABASE IF NOT EXISTS jobseeker 是**跨三行**的，
+  我的正则只删了第一行，剩下 DEFAULT CHARACTER SET / COLLATE 两行孤儿，
+  于是 V1 里出现一个没有主语的语句，直接语法错误。
+- 修复：删掉孤儿行，并全文复查 CREATE DATABASE 与 USE 在 SQL 区已不存在（只在注释里）。
+- 教训：**「删除以某关键字开头的行」这种正则，对跨行语句一定不完整** ——
+  要么按块处理，要么删完必须全文复查关键字。
+
+#### 坑 5：MySQL 5.7 到 8.0 原地升级（官方做法，不依赖 Installer）
+
+- Installer 走不通：web 版拉不到包列表（No packages found），且 bundle 只带当前版本。
+- 走 zip 版 + mysqld 直接启动旧 datadir：
+  1. 阿里云镜像下 mysql-8.0.28-winx64.zip（211.74MB，curl -L -C - 断点续传）；
+  2. **必须写 my.ini** —— Windows 上 8.0 的 zip 版会忽略命令行的 --datadir，
+     回落成默认路径（不存在）后直接 Aborting；
+  3. upgrade=FORCE 让它自动升级数据字典；
+  4. 升级后 root 认证变了，连接要带密码。
+- 备份与验证（升级前必做，且必须真恢复一次）：
+  mysqldump --result-file 直写文件；
+  **不要用 PowerShell 管道把 dump 落到文件**（会加 BOM 并按行重编码，备份直接报废，
+  这个坑 DEV_NOTES 第 3 条记过，今天又踩了一次）；
+  恢复后逐表核对行数一致，datadir 另存一份副本。
+
+#### 最终验收（真机，全部达成）
+
+- 全新库从零跑 V1 到 V4，flyway_schema_history 四条全部 success=YES；
+- **列结构逐列一致**：临时库 92 列 vs 本机库 92 列（唯一索引差异是 Flyway 自己的表）；
+- 本机库 baseline 到 V4：一条记录，数据零改动；
+- mvn test 49 条全绿；应用真启动成功，/agent/backends 三件套后端符合预期；
+- Flyway 版本回 9.22.3（MySQL 8.0 后无需再为迁就 5.7 钉老版本）。
+
+- 标签：flyway,数据库迁移,spring装配,单测盲区,mysql升级,备份

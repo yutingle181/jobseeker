@@ -43,6 +43,37 @@
 
 效果：模拟面试 / 简历制作 / 职位搜索等能力能直接结合用户岗位与简历作答；`user_context` 为空时行为与旧版一致。
 
+## 数据库迁移（Flyway）
+
+改表结构**一律新增 `server/src/main/resources/db/migration/V<n>__<描述>.sql`** ✓✓ —— 不要再手工改库 ✗、不要再往 `db/legacy/` 加脚本 ✗。
+
+| 文件 | 内容 |
+| --- | --- |
+| `db/migration/V1__init_schema.sql` | 全量建表（11 张表） |
+| `db/migration/V2__add_delivery_exam_done.sql` | `delivery_record.exam_done` |
+| `db/migration/V3__add_delivery_exam_deadline_and_apply_url.sql` | `exam_deadline` + `apply_url` |
+| `db/migration/V4__add_list_indexes.sql` | 五个 `(user_id, created_at)` 联合索引 |
+| `db/legacy/` | **已废弃**的手工脚本，保留仅作对账（含为什么废弃的说明） |
+
+执行状态记录在 `flyway_schema_history` 表，随时可查 ✓：
+
+```sql
+SELECT version, description, success, installed_on
+FROM jobseeker.flyway_schema_history ORDER BY installed_rank;
+```
+
+**已有库不会重跑** ✓✓ —— `baseline-version: 4` 表示"库已到 V4 状态" ✓，
+全新库则从 V1 顺序执行 ✓✓，最终结构**必然一致** ✓（这正是手工方案做不到的 ✓）。
+
+### 写迁移文件的两条硬规矩（都是真机踩出来的 ✗）
+
+1. **注释里不要写英文分号** ✗✗ —— Flyway 先按分号切语句、再剥注释，
+   注释里的 `USE jobseeker;` 会把 SQL 截断，报错还指向下一行 ✗✗
+2. **不要写 `USE <库名>`** ✗ —— Flyway 已把会话切到目标库 ✗；
+   同理不能自己 `CREATE DATABASE` ✓（切临时库做演练时会把 DDL 打到同名库上 ✗）
+
+更多取舍与踩坑见 [`docs/DEV_NOTES.md`](docs/DEV_NOTES.md) 的 2026-10-17 小节。
+
 ## 缓存 / 分布式锁 / 限流（Redis 三件套，默认关闭）
 
 后端对 Agent 的三项保护能力，**默认全部不启用 Redis**：不装 Redis 的机器照常启动，
@@ -100,8 +131,11 @@ jobseeker/
 │   ├── src/main/java/com/jobseeker/lock/        # 分布式锁：SET NX EX + Lua 释放 + 进程内降级
 │   ├── src/main/java/com/jobseeker/ratelimit/   # 限流：INCR+EXPIRE Lua + 进程内降级 + 拦截器
 │   ├── src/main/java/com/jobseeker/redis/       # Redis 可用性探测（三件套共用一份）
-│   └── src/test/java/com/jobseeker/             # 单测：44 条（JUnit5 + Mockito，无需 Redis）
-│   └── src/main/resources/db/schema.sql   # 建表脚本（含招聘站点初始数据）
+│   └── src/test/java/com/jobseeker/             # 单测：49 条（JUnit5 + Mockito，无需 Redis/MySQL）
+│   └── src/main/resources/db/
+│       ├── migration/        # Flyway 迁移（**改表结构只加这里的 V<n>__*.sql**）
+│       ├── legacy/           # 已废弃的手工脚本（保留仅作对账）
+│       └── schema.sql        # 仅供人工建库/对账，权威路径是 migration/
 ├── web/                     # Vue 3 + Vite + tdesign + Tailwind
 ├── .mvn/local-settings.xml.example   # 本地 Maven 配置模板（复制为 server/.mvn/local-settings.xml 后使用，不进库）
 ├── docker-compose.yml       # 编排 mysql + server + web
@@ -144,7 +178,10 @@ cd ..\Agent实习项目
 .\run_api.ps1
 
 # 2) 建库
-mysql -u root -p < server/src/main/resources/db/schema.sql
+# 建一个空库即可，表结构由应用启动时的 Flyway 自动完成（见「数据库迁移」一节）✓✓：
+#   mysql -u root -p -e "CREATE DATABASE jobseeker DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+# 下面这条是**纯手工**路径（不含 V2~V4 的增量列 ✗），只在排查时用：
+# mysql -u root -p < server/src/main/resources/db/schema.sql
 
 # 3) 起后端（JDK 17） —— 新开一个终端、回到 jobseeker 目录后进入 server
 cd jobseeker\server
