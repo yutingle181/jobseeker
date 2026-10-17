@@ -44,3 +44,6 @@ server/data/
 
 # 与项目无关的本地文档（仅本地保存，不进仓库）
 docs/portfolio/
+
+# 一键脚本的运行日志与 PID 记录（本地产物，不进版本库）
+_runlogs/
