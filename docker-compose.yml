@@ -13,8 +13,17 @@ services:
       - '3306:3306'
     volumes:
       - mysql_data:/var/lib/mysql
-      # 首次启动自动建表
-      - ./server/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      # 2026-10-16：这里**曾经**挂 schema.sql 到 /docker-entrypoint-initdb.d/ 让容器首次启动自动建表，
+      # 现在移除——建表统一交给应用启动时的 Flyway（server/src/main/resources/db/migration/V*.sql）。
+      #
+      # 为什么必须换：initdb 机制只跑 schema.sql，而本机库的现状是
+      # **schema.sql + 三个手工增量脚本**。也就是说容器里的结构一直缺
+      # exam_done / exam_deadline / apply_url 三列和五个联合索引，与本机不一致，
+      # 且这个不一致**从代码里完全看不出来**——正是手工迁移的典型代价。
+      #
+      # 换成 Flyway 后：容器与本机跑同一套迁移脚本，最终结构**必然一致**；
+      # 且 MYSQL_DATABASE 仍会建出空库，Flyway 从 V1 顺序建表即可。
+      #
     healthcheck:
       test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 10s

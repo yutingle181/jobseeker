@@ -10,7 +10,9 @@ spring:
       max-request-size: 20MB
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/jobseeker?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    # 做成可覆盖（原先硬编码）：迁移演练、CI 临时库、容器部署都要能切库，
+    # 与下面的 username/password 保持同一种写法。
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/jobseeker?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     hikari:
@@ -20,6 +22,22 @@ spring:
       connection-timeout: 30000
       max-lifetime: 1800000
       idle-timeout: 600000
+
+  # 数据库迁移（Flyway）。改表结构一律加 db/migration/V<版本>__<描述>.sql，
+  # 不要再手工改库或手写零散 SQL —— 那样"执行过没有"永远查不出来。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 已有库只做 baseline、不重跑 V1..V4：
+    # 本机库的现状恰好等于 schema.sql + 三个手工增量脚本（= V1..V4 的最终结构），
+    # 所以 baseline 到 4 是准确的，且数据零改动。
+    # ⚠️ 改这个值前必须确认库的真实结构，否则会把「没执行过的迁移」当成执行过。
+    baseline-on-migrate: true
+    baseline-version: 4
+    # 校验：迁移文件被改过（checksum 变了）时报错而不是悄悄跳过。
+    # 这是 Flyway 最值钱的能力——它能发现"有人改了已执行过的迁移文件"。
+    validate-on-migrate: true
+    baseline-description: legacy-jobs (schema.sql + 3 手工增量脚本)
 
 mybatis-plus:
   configuration:

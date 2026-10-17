@@ -1,3 +1,8 @@
+-- ⚠️ 本文件已于 2026-10-16 起**不再是建表的权威路径**，仅保留供人工建库与对账使用。
+-- 权威路径：server/src/main/resources/db/migration/V1__init_schema.sql（Flyway 迁移）。
+-- 差别：V1 相对本文件去掉了 CREATE DATABASE 与 USE（Flyway 自己管库），
+--       且**不含** V2~V4 的三个增量（旧脚本是手工单独执行的）。
+-- 详见 db/legacy/README.md。
 -- 求职辅助软件 · 数据库初始化
 -- 说明：只存放 Agent 没有的业务数据；AI 生成内容一律留在 Agent 侧，通过归档单向同步。
 
