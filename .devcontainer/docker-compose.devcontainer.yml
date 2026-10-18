@@ -1,0 +1,63 @@
+# devcontainer 的依赖服务（只放 MySQL + Redis ✓✓）
+#
+# 为什么不把 jobseeker 自己也放进来：
+#   开发时要反复改代码 + 重启 ✓✓ 用 `mvn spring-boot:run` 本地跑最顺手 ✓✓
+#   （容器化留给部署演练 ✓✓ 那时用仓库根的 docker-compose.yml ✓✓）
+#
+# ⚠️ 镜像 tag 一律钉小版本 —— 2026-10-18 真机踩过：
+#   `mysql:8.0` 浮动 tag 指向 8.0.46，其 entrypoint 传了废弃参数 `--skip-host-cache`，
+#   容器启动即崩（Exited 255），而现象极具误导性（docker run 成功、容器看得见、
+#   应用报的是连接失败 ✗✓）。详见 docs/DEV_NOTES.md 2026-10-18 小节。
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/java:17
+    # 依赖服务由下面两个 service 提供；app 本身只作为开发容器存在 ✓✓
+    command: sleep infinity
+    network_mode: service:db
+    depends_on:
+      - db
+      - cache
+
+  db:
+    # 钉到 8.0.43（本地 + CodeSpaces 双重验证可启动 ✓✓）
+    # 升级路径：先在本文件之外的 CI / 临时环境跑一次再改这个版本号 ✓✓
+    image: mysql:8.0.43
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: jobseeker
+    # CodeSpaces 免费档只有 4GB ✓✗ —— MySQL 8 默认配置（performance_schema + 128MB pool）
+    # 在这机器上容易被 OOM kill ✗✓。显式关掉/调小 ✓✓
+    command: >
+      mysqld
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=128M
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 要**真能执行 SQL**才算就绪 ✓✓ 只 ping 会在"刚起来还没接受连接"时误判 ✗✓
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  cache:
+    # 与 Agent 侧 docker-compose.prod.yml 保持一致（同一批钉的 ✓✓）
+    # Redis 只是 jobseeker 三件套的可选后端 ✨✓ 不启用也能跑（自动降级进程内 ✓✓）
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "set", "probe", "1", "ex", "10"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:

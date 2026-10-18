@@ -155,6 +155,28 @@ cd server
 mvn -s .mvn/local-settings.xml test
 ```
 
+### 用 GitHub CodeSpaces 一键就绪（推荐新人 ✓✓）
+
+仓库带了 `.devcontainer/` ✓✓ —— **Create codespace 后直接跑，不用配任何东西** ✓✓：
+
+1. GitHub 仓库页 → **Code → Codespaces → Create codespace on master** ✓✓
+2. 等约 1 分钟 ✓✓（自动装 JDK 17 + Node 20 + MySQL + Redis + 建好 toolchains.xml ✓✓）
+3. 直接跑 ✓✓：
+```bash
+cd server && mvn spring-boot:run
+```
+
+**devcontainer 固化掉的环境坑** ✓✓（2026-10-18 真机踩出来的 ✓✓ 详见 `docs/DEV_NOTES.md` 同日期小节 ✓✓）：
+
+| 坑 | 没有 devcontainer 时 | 现在 |
+| --- | --- | --- |
+| CodeSpaces 默认 JDK **25** ≠ toolchain 要的 **17** | 手工 `apt install` + 写 toolchains.xml ✗✗ | 镜像就是 JDK 17 + **自动建 toolchains.xml**（动态探测路径 ✓✓） |
+| `~/.m2/toolchains.xml` 是**隐藏文件** | 搜不到 → 有人会全局搜 → **把 4GB 的 CodeSpaces 搜崩** ✗✗ | 自动建好 ✓✓ 且预配 `search.exclude` 防搜崩 ✓✓ |
+| 重启后 Docker 容器全没 | 每次重跑 `docker run` + **等就绪** ✗✗ | MySQL / Redis 作为 service **自动起** ✓✓ |
+| `mysql:8.0` 浮动 tag → 8.0.46 镜像**启动即崩** | 毫无预兆挂 ✗✗ 应用还报连接失败 ✨✓ | 钉死 `mysql:8.0.43` + 限内存 + healthcheck 真验 SQL ✓✓ |
+
+> ⚠️ 想用**自己本机**跑（非 CodeSpaces）✓✓ 仍按下面「快速开始」✓✓ —— devcontainer 只影响 CodeSpaces ✓✓。
+
 ## 快速开始
 
 ### 一键启动（推荐）
