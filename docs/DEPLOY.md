@@ -1,5 +1,23 @@
 # 部署与本地运行
 
+> **真机验证状态（2026-10-18 更新）**
+>
+> 已在 **GitHub Codespaces**（2 核 / 4GB / Ubuntu）+ **Docker MySQL 8.0.43** 的
+> **全新空库**上从零验证通过 ✓✓：
+>
+> - `mvn spring-boot:run` 启动成功，`Tomcat started on port 8080`
+> - `GET /agent/backends` 返回 `{"redisEnabled":false,"cache":"memory","lock":"local","rateLimit":"local"}`
+>   （Redis 未启用 → 三件套自动降级进程内 ✓✓）
+> - Flyway 从空库自动建到 V4，`flyway_schema_history` 4 条 `success=1` ✓✓
+>   —— 与本机（MySQL 8.0.28 + 原手工增量）**结构一致** ✓✓
+>
+> 过程中发现并修复：CodeSpaces 默认 JDK 25 ≠ toolchain 要求的 17、
+> `toolchains.xml` 隐藏文件、重启后 Docker 容器丢失、
+> **`mysql:8.0` 浮动 tag 指向的 8.0.46 镜像 entrypoint 传废弃参数导致容器启动即崩**
+> （详见 DEV_NOTES 2026-10-18 小节 ✓✓，镜像 tag 已钉死 ✓✓）。
+>
+> **仍未验证**：多副本（真 Redis + 两个实例）下的取消/背压共享 —— 需真机部署 ✓✓。
+
 ## 前置条件
 
 - JDK 17（本机 `C:\Program Files\Java\jdk-17`）

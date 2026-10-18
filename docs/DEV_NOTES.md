@@ -157,3 +157,76 @@
 - Flyway 版本回 9.22.3（MySQL 8.0 后无需再为迁就 5.7 钉老版本）。
 
 - 标签：flyway,数据库迁移,spring装配,单测盲区,mysql升级,备份
+### 2026-10-18 在 GitHub Codespaces 里真机验证：4 个环境坑，每个都能让新人卡半小时
+
+- 背景：为了验证「部署产物本身是好的」✨✓（本机没 Docker ✗✗ 只能上 Codespaces ✓✓），
+  在 Codespaces 里从零跑 jobseeker（+ Docker MySQL）。连踩 4 个坑，全部记在这里。
+
+#### 坑 1：CodeSpaces 默认 JDK 是 25，而 pom 的 toolchain 要 17
+
+- 现象：`mvn spring-boot:run` 直接
+  `Cannot find matching toolchain definitions for the following toolchain types: jdk [ version='17' ]`。
+- 原因：CodeSpaces 镜像用 SDKMAN 装了 **JDK 25**（`/usr/local/sdkman/candidates/java/25.0.4+1-ms` ✓✓），
+  而 `pom.xml` 的 maven-toolchains-plugin 要求 JDK 17 ✨✓，
+  且 `~/.m2/toolchains.xml` 在全新环境里**不存在** ✗✗。
+- ⚠️ **不能简单地"放宽到 17+"** ✗✗ —— Spring Boot 3.2.5 官方只支持 JDK 17–21 ✨✓
+  JDK 25 不在支持范围 ✨✓ 硬跑会出诡异问题 ✓✗。
+- 解决：`apt-get install openjdk-17-jdk` + 写 `~/.m2/toolchains.xml` 指向它 ✓✓。
+- 教训：**toolchain 是"环境要求"不是"代码偏好"** ✓✓ —— 要么把环境要求写进 devcontainer ✓✓
+  要么在 README 里写清"需要 JDK 17"✓✓，别让人猜 ✗✓。
+
+#### 坑 2：`toolchains.xml` 是隐藏文件，搜不到 → 有人会去全局搜 → 把 CodeSpaces 搜崩
+
+- 现象：想确认 toolchains.xml 写没写成功，在 VS Code 里全局搜文件名 ✨✓
+  → CodeSpaces **直接崩了**（重启才好 ✗✓）。
+- 原因：VS Code 全局搜索会索引**整个文件系统** ✓✗ —— `/usr/lib/jvm`、`~/.sdkman/candidates`
+  （好几个 JDK ✨✓）、`/opt`、`/usr/local` …… CodeSpaces 免费档只有 **4GB 内存** ✨✓ 一索引就 OOM ✨✓。
+- 解决：① 隐藏文件用 `cat ~/.m2/toolchains.xml` 看 ✓✓；
+  ② 要搜代码用 `grep -rn "xxx" server/src/` ✓✓ **最快最安全** ✓✓；
+  ③ 或 `Ctrl+Shift+F` 时把范围限定到 `server/src/**` ✓✓。
+- 教训：**在资源受限的云端环境里，别用会遍历全盘的操作** ✗✗
+  （全局搜索 / `find /` / 全盘索引 ✨✓）。 CodeSpaces 的 4GB 是本机 16GB 的 1/4 ✨✓ 习惯要改 ✓✓。
+
+#### 坑 3：CodeSpaces 重启后 Docker 容器全没
+
+- 现象：昨天跑得好好的 MySQL，今天 `docker exec` 报 `is not running` ✨✓。
+- 原因：CodeSpaces 的**文件系统持久** ✓✓ 但 **Docker 容器不持久** ✨✗（重启即清 ✨✓）。
+- 解决：重启后重跑 `docker run`（或 `docker start <name>` ✓✓ 容器定义还在时 ✓✓），
+  **并且要等它就绪**再起应用 ✨✓（见坑 4 ✨✓）。
+- 教训：**"昨天能跑"不等于"今天能跑"** ✓✓ —— 云端开发环境的生命周期比本机短得多 ✓✓。
+  这也是 devcontainer 的价值：把环境固化下来 ✓✓。
+
+#### 坑 4（最有价值）：`mysql:8.0` 浮动 tag 指向的 8.0.46 镜像，容器启动即崩
+
+- 现象：`docker run mysql:8.0` **返回成功** ✓✓ `docker ps -a` **看得到容器** ✓✓
+  但状态是 `Exited (255)` ✨✓；应用连不上，报的是 `Communications link failure` ✨✓。
+- 一路查上去才在 `docker logs` 里看到真凶 ✓✓：
+  ```
+  [ERROR] [MY-0113002] The syntax '--skip-host-cache' is deprecated and will be removed
+  [ERROR] [MY-010091] /usr/bin/mysqld: Shutdown complete
+  ```
+  **MySQL 8.0.46 官方镜像的 entrypoint 传了个废弃参数** ✨✓ 自己崩了 ✨✓。
+- 根因：`mysql:8.0` 是**浮动 tag** ✓✗ 永远指向最新 patch ✨✓
+  → 上游一发新版，你的环境毫无预兆就挂 ✨✓。
+- **为什么这个坑特别值钱** ✓✓：
+  1. **误导性极强** —— `docker run` 成功、容器看得见、只是 Exited ✨✓
+     而应用报的是连接失败 ✨✓ 三处症状全指向"别处"✓✗；
+  2. **生产上就是事故** —— 服务器上你不在场 ✨✓ 服务起不来却不知道要看容器日志 ✓✗；
+  3. **本机没 Docker 的人永远发现不了** ✨✓ —— 这次是上了 CodeSpaces 才撞见 ✓✓。
+- 解决：compose 钉到 `mysql:8.0.43` ✓✓（已本地 + CodeSpaces 双重验证可启动 ✓✓）。
+  同一批把 Agent 侧 `redis:7-alpine` 钉成 `redis:7.4-alpine` ✓✓。
+- 教训：
+  1. **compose 里的第三方镜像一律钉小版本** ✨✓ —— 浮动 tag = 把环境稳定性交给上游 ✨✓；
+  2. **升级路径要写明** ✓✓ —— 先在 CI / CodeSpaces 里跑一次再改版本号 ✓✓；
+  3. **排障顺序**：容器类问题先 `docker ps -a` + `docker logs` ✓✓
+     别一上来就翻应用日志 ✨✓（这次就是应用日志指向连接失败、真凶在容器日志里 ✓✓）。
+
+#### 最终验收（全部达成 ✓✓）
+
+- CodeSpaces 里 `mvn spring-boot:run` 起成功，`Tomcat started on port 8080` ✓✓；
+- `GET /agent/backends` → `{"redisEnabled":false,"cache":"memory","lock":"local","rateLimit":"local"}` ✓✓
+  （三件套 Bean 装配通了 ✓✓ 降级链生效 ✓✓ 状态可观察 ✓✓）；
+- Docker MySQL 8.0.43 + **全新空库** → Flyway 自动建到 V4 ✓✓（4 条 success=1 ✓✓）
+  —— 与"本机 MySQL 8.0.28 + 手工增量"结构一致 ✓✓ **环境漂移消除** ✓✓✓。
+
+- 标签：codespaces,环境坑,jdk版本,toolchain,浮动tag,mysql,devcontainer
