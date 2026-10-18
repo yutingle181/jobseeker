@@ -4,7 +4,15 @@ version: '3.8'
 # Python Agent 是独立服务（在 ../Agent实习项目 下单独启动），本软件通过 HTTP 调用它。
 services:
   mysql:
-    image: mysql:8.0
+    # 钉死小版本，不要用浮动 tag `mysql:8.0` ✨✓
+    # 2026-10-18 在 GitHub Codespaces 真机验证时踩到：`mysql:8.0` 当时指向 8.0.46，
+    # 而该镜像的 docker-entrypoint 传了已废弃的 `--skip-host-cache` 参数，
+    # 导致容器**启动即崩**（Exited 255，日志里只有一行 MY-0113002 ✓✓）。
+    # 上游一发新版，你的环境毫无预兆就挂 ✨✓ —— 而且服务器上你不在场 ✨✓。
+    # 钉到 8.0.43（已验证可启动 ✓✓）；升级时**先本地/CI 跑一次再改这里** ✓✓。
+    # 注意：本机开发库可能是另一个 8.0.x ✨✓ —— 表结构由 Flyway 统一（V1~V4 ✓✓），
+    # 版本差异不影响建表结果 ✓✓。
+    image: mysql:8.0.43
     container_name: jobseeker-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
