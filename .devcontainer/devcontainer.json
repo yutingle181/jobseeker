@@ -1,0 +1,70 @@
+{
+  // 2026-10-18 新增：把「新人在 CodeSpaces 里踩的 4 个环境坑」一次固化掉。
+  //
+  // 这 4 个坑都是真机验证时真实踩到的（见 docs/DEV_NOTES.md 2026-10-18 小节）：
+  //   1. CodeSpaces 默认 JDK 是 25，而 pom 的 toolchain 要 17
+  //      （且 Spring Boot 3.2.5 只支持 17–21，不能简单放宽 ✗✗）
+  //   2. ~/.m2/toolchains.xml 在全新环境里不存在，还是隐藏文件、搜不到
+  //   3. CodeSpaces 重启后 Docker 容器全没 → MySQL 每次都要重跑 + 等就绪
+  //   4. `mysql:8.0` 浮动 tag 指向的 8.0.46 镜像 entrypoint 传废弃参数，容器启动即崩
+  //
+  // 有了这个文件，Create codespace 后直接 `cd server && mvn spring-boot:run` 就行 ✓✓
+  "name": "jobseeker (Java 17 + MySQL + Redis)",
+
+  // 用官方 JDK 17 镜像 —— 不依赖 CodeSpaces 默认的 JDK 25 ✗✓
+  "image": "mcr.microsoft.com/devcontainers/java:17",
+
+  // 依赖服务（MySQL / Redis）由 compose 拉起，**自动起、自动等就绪** ✓✓
+  "dockerComposeFile": "docker-compose.devcontainer.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+  "features": {
+    // 前端要 Node 20+（web/ 是 Vue3 + Vite ✓✓）
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    // Docker CLI：调试用（看容器日志、进容器 ✓✓）—— 依赖服务本身由 compose 管 ✓✓
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup-toolchain.sh",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // ⚠️ 这条是今天「全局搜索把 4GB 的 CodeSpaces 搜崩」的直接对策 ✓✓
+        // VS Code 全局搜索默认会索引整个文件系统（/usr/lib/jvm、/opt、~/.sdkman/candidates
+        // 里有好几个 JDK ✗✓），4GB 内存一索引就 OOM ✗✓
+        "search.exclude": {
+          "**/node_modules": true,
+          "**/target": true,
+          "**/.git": true,
+          "/usr/**": true,
+          "/opt/**": true,
+          "/home/codespace/.sdkman/**": true,
+          "/home/codespace/.m2/**": true,
+          "/home/codespace/.cache/**": true
+        },
+        "files.watcherExclude": {
+          "**/target/**": true,
+          "**/node_modules/**": true
+        },
+        // Java 项目默认配置 ✓✓
+        "java.configuration.updateBuildConfiguration": "automatic",
+        "java.compile.nullAnalysis.mode": "automatic"
+      },
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "dbaeumer.vscode-eslint",
+        "vue.volar"
+      ]
+    }
+  },
+
+  // 容器资源：CodeSpaces 免费档 4GB，MySQL + JVM + Node 全跑会紧张 ✓✗
+  // 这里给 MySQL 单独限制（compose 里已做 ✓✓），应用侧不设上限以免 JVM 起不来 ✗✓
+  "forwardPorts": [8080, 5173, 3306, 6379],
+
+  "remoteUser": "codespace"
+}
