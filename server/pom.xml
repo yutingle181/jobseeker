@@ -22,7 +22,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <!-- 钉死 Flyway 版本，不让它跟着 Spring Boot 的 BOM 漂移。
 
              本机 MySQL 已于 2026-10-17 从 5.7 升级到 8.0.28（in-place upgrade ✓✓
@@ -39,9 +39,9 @@
              当时若盲目追新到 10.x，等于给项目加了"必须 MySQL 8.0+"的隐性约束，
              而 docker-compose 里明明是 8.0、本机却是 5.7，这种漂移早就存在，只是没被暴露 ✓。 -->
         <flyway.version>9.22.3</flyway.version>
-        <jjwt.version>0.12.5</jjwt.version>
+        <jjwt.version>0.13.0</jjwt.version>
         <okhttp.version>4.12.0</okhttp.version>
-        <lombok.version>1.18.32</lombok.version>
+        <lombok.version>1.18.48</lombok.version>
         <!--
             默认构建输出目录。
             - CI / Linux / macOS：保持在项目内 target，便于 upload-artifact。
@@ -201,7 +201,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-toolchains-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.3.0</version>
                 <executions>
                     <execution>
                         <goals>
